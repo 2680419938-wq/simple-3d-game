@@ -21,7 +21,7 @@ def opt_map():
 
 O = opt_map()
 ROOT = r"D:\ai\建模"
-BASE = O.get('base', ROOT + r"\dragon-men-rebuild\joint-work\merge\v3\DragonMan_Std_Run.blend")
+BASE = O.get('base', ROOT + r"\dragon-men-rebuild\tail-work\DragonMan_Std_Run_tail45.blend")
 SRC = O['src']
 CLIP = O.get('clip') or os.path.splitext(os.path.basename(SRC))[0]
 OUT_BLEND = O.get('out-blend', ROOT + r"\AnimLib\out\DragonMan_Std_" + CLIP + ".blend")
