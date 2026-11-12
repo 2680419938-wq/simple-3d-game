@@ -122,7 +122,7 @@ const glbUrl = glbParam
   ? (glbParam.startsWith('/') ? glbParam : '/' + glbParam)
   : lodParam === '1' ? '/DragonMan_Game_LOD1.glb'
   : lodParam === '2' ? '/DragonMan_Game_LOD2.glb'
-  : '/DragonMan_Std_Run.glb';
+  : '/DragonMan_New.glb';
 const freezeT = params.has('freeze') ? parseFloat(params.get('freeze')) : null; // __freezeT
 new GLTFLoader().load(glbUrl, (gltf) => {
   model = gltf.scene;
