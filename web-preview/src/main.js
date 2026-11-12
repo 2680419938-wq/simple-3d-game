@@ -60,7 +60,7 @@ scene.add(grid);
 const rig = {
   yaw: 0.62, // 3/4 front view so the face and the tail both read
   pitch: 0.2,
-  dist: 4.6, // __camParams
+  dist: 6.2, // __camParams
   target: new THREE.Vector3(0, 1.1, 0),
 };
 
@@ -101,8 +101,10 @@ const statsEl = document.getElementById('stats');
 
 let mixer = null;
 let model = null;
-const clips = { idle: null, walk: null };
-const actions = { idle: null, walk: null };
+const clips = { idle: null, walk: null, run: null };
+const actions = { idle: null, walk: null, run: null };
+const WALK_SPEED = 0.61;   // authored walk: 0.324 m per side / 1.0667 s
+const RUN_SPEED = 2.83;    // authored run: 0.85 m stride, 0.6 s cycle
 let curAnim = 'idle';
 const clock = new THREE.Clock();
 
@@ -120,7 +122,7 @@ const glbUrl = glbParam
   ? (glbParam.startsWith('/') ? glbParam : '/' + glbParam)
   : lodParam === '1' ? '/DragonMan_Game_LOD1.glb'
   : lodParam === '2' ? '/DragonMan_Game_LOD2.glb'
-  : '/DragonMan_Std_Walk.glb';
+  : '/DragonMan_Std_Run.glb';
 const freezeT = params.has('freeze') ? parseFloat(params.get('freeze')) : null; // __freezeT
 new GLTFLoader().load(glbUrl, (gltf) => {
   model = gltf.scene;
@@ -139,10 +141,18 @@ new GLTFLoader().load(glbUrl, (gltf) => {
   mixer = new THREE.AnimationMixer(model);
   // 34-bone package ships Idle_Lively + Walk; pick each by name, fall back to first clip
   const byName = (n) => gltf.animations.find((a) => a.name === n);
-  clips.idle = byName('Idle_Lively') || gltf.animations[0];
+  clips.idle = byName('Idle_Lively') || gltf.animations[0] || null;
   clips.walk = byName('Walk') || null;
+  clips.run = byName('Run') || null;
   if (clips.idle) { actions.idle = mixer.clipAction(clips.idle); actions.idle.play(); }
-  if (clips.walk) { actions.walk = mixer.clipAction(clips.walk); actions.walk.play(); actions.walk.enabled = false; actions.walk.setEffectiveWeight(0); }
+  for (const k of ['walk', 'run']) {
+    if (!clips[k]) continue;
+    actions[k] = mixer.clipAction(clips[k]);
+    actions[k].play();
+    actions[k].enabled = false;
+    actions[k].setEffectiveWeight(0);
+  }
+  const hasRun = !!actions.run;
   if (freezeT !== null && clips.walk) {
     actions.idle.stop();
     actions.walk.enabled = true;
@@ -157,7 +167,9 @@ new GLTFLoader().load(glbUrl, (gltf) => {
   const lodName = { '0': 'LOD0', '1': 'LOD1', '2': 'LOD2' }[lodParam] || (glbParam ? glbParam.split('/').pop() : '标准包 70 骨');
   const clip0 = clips.idle;
   document.getElementById('lodname').textContent =
-    lodName + ' · ' + gltf.animations.map((a) => a.name + ' ' + a.duration.toFixed(2) + 's').join(' + ');
+    lodName + ' · ' + gltf.animations.map((a) => a.name + ' ' + a.duration.toFixed(2) + 's').join(' + ') +
+    (hasRun ? '' : ' · 无 Run 动作（Shift 时加快走路）');
+  window.__clips = { hasRun, names: gltf.animations.map((a) => a.name) };
   window.__ready = true;
   console.log('clips:', gltf.animations.map((a) => a.name + ' ' + a.duration.toFixed(2) + 's').join(', '));
 }, undefined, (err) => {
@@ -196,13 +208,16 @@ function update(dt) {
 
   moveDir.set(0, 0, 0).addScaledVector(forward, iz).addScaledVector(right, ix);
   const moving = moveDir.lengthSq() > 0 && !!model;
-  const targetSpeed = moving ? (keys.has('ShiftLeft') || keys.has('ShiftRight') ? 6.0 : 2.2) : 0;
+  const running = keys.has('ShiftLeft') || keys.has('ShiftRight');
+  const targetSpeed = moving ? (running ? RUN_SPEED : WALK_SPEED) : 0;
   speed += (targetSpeed - speed) * Math.min(1, dt * 9);
-  // walk clip while moving, idle when still (34-bone package); run reuses walk sped up
-  if (clips.walk) {
-    setAnim(moving ? 'walk' : 'idle');
-    if (actions.walk) actions.walk.setEffectiveTimeScale(keys.has('ShiftLeft') || keys.has('ShiftRight') ? 1.8 : 1.0);
-  }
+  // pick the clip for the current state; playback rate tracks real speed so feet stop sliding
+  let want = !moving ? 'idle' : running ? 'run' : 'walk';
+  if (!actions[want]) want = moving ? 'walk' : 'idle';
+  if (!actions[want]) want = 'idle';
+  setAnim(want);
+  if (actions.walk) actions.walk.setEffectiveTimeScale(THREE.MathUtils.clamp(speed / WALK_SPEED, 0.45, 1.8));
+  if (actions.run) actions.run.setEffectiveTimeScale(THREE.MathUtils.clamp(speed / RUN_SPEED, 0.5, 1.6));
 
   if (model) {
     if (moving) {
@@ -219,10 +234,11 @@ function update(dt) {
     );
   }
 
-  const h = Math.cos(rig.pitch) * rig.dist;
+  const dist = rig.dist + Math.min(speed, 3) * 0.5;  // pull back while running
+  const h = Math.cos(rig.pitch) * dist;
   desiredCam.set(
     rig.target.x + Math.sin(rig.yaw) * h,
-    rig.target.y + Math.sin(rig.pitch) * rig.dist,
+    rig.target.y + Math.sin(rig.pitch) * dist,
     rig.target.z + Math.cos(rig.yaw) * h
   );
   if (!camInit) { camera.position.copy(desiredCam); camInit = true; }
@@ -238,7 +254,7 @@ function update(dt) {
 
   if (model && stateEl) {
     stateEl.textContent =
-      `pos ${model.position.x.toFixed(1)}, ${model.position.z.toFixed(1)} · speed ${speed.toFixed(1)} m/s · ${targetSpeed > 2.5 ? 'RUN' : targetSpeed > 0 ? 'WALK' : 'IDLE'}`;
+      `pos ${model.position.x.toFixed(1)}, ${model.position.z.toFixed(1)} · speed ${speed.toFixed(1)} m/s · clip ${want.toUpperCase()}`;
   }
 }
 
