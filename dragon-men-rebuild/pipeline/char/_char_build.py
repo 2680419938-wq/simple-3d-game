@@ -5,7 +5,7 @@ import sys; sys.path.insert(0,EXT)
 bpy.ops.preferences.addon_enable(module='bl_ext.user_default.mpfb')
 HS=importlib.import_module('bl_ext.user_default.mpfb.services.humanservice').HumanService
 SRC=r'D:/ai/建模/dragon-men-rebuild/skin-work/mpfb_male.blend'
-V2=r'D:/ai/建模/dragon-men-rebuild/skin-work/thigh_diag/newbody/v2.blend'
+V2=r'D:/ai/建模/dragon-men-rebuild/skin-work/head_only2.blend'
 PARTS=r'D:/ai/建模/dragon-men-rebuild/skin-work/armor_parts.blend'
 OUT=r'D:/ai/建模/dragon-men-rebuild/skin-work/thigh_diag/newbody'
 bpy.ops.wm.open_mainfile(filepath=SRC)
@@ -162,18 +162,22 @@ shell('AR_bracerLA',lambda c:0.00<=tt(c,BLA,BLB)<=0.44 and sd(c,BLA,BLB)<0.060,0
 shell('AR_bracerLB',lambda c:0.52<=tt(c,BLA,BLB)<=1.02 and sd(c,BLA,BLB)<0.060,0.016)
 shell('AR_bracerRA',lambda c:0.00<=tt(c,BRA,BRB)<=0.44 and sd(c,BRA,BRB)<0.060,0.016)
 shell('AR_bracerRB',lambda c:0.52<=tt(c,BRA,BRB)<=1.02 and sd(c,BRA,BRB)<0.060,0.016)
+def spinebone(z):
+    return sorted([('spine01',1.184),('spine02',1.055),('spine03',0.999),('spine04',0.933)],key=lambda t:abs(t[1]-z))[0][0]
 PEL={'pelvis.L':lambda p:1.0 if p.x>=0 else 0.0,'pelvis.R':lambda p:1.0 if p.x<0 else 0.0}
 r_wai=fit_ring(0.955,0.24); r_sk=fit_ring(0.905,0.24)
 loft('AR_belt',[0.935,0.975],[r_wai,r_wai],0.016,TRIM,PEL)
 r_rib=[r_sk[i]*(1.0+0.030*math.cos(10*2*math.pi*i/NB)) for i in range(NB)]
-t1=[[min(r*k,0.29) for r in r_rib] for k in [1.04,1.07,1.09]]
-t2=[[min(r*k,0.31) for r in r_rib] for k in [1.11,1.15,1.18]]
-mk1=lambda i: i%12!=0
-mk2=lambda i: i%12!=6
-loft('AR_skirt1',[0.915,0.850,0.788],t1,0.018,PLATE,PEL,mk1)
-loft('AR_skirt2',[0.774,0.722,0.672],t2,0.018,PLATE,PEL,mk2)
-hem=[min(r*1.21,0.34) for r in r_rib]
-loft('AR_hem',[0.628,0.668],[hem,hem],0.014,TRIM,PEL)
+skz=[0.948,0.882,0.816,0.750,0.684]
+loft('AR_skirt',skz,[[min(r*k,0.32) for r in r_rib] for k in [1.05,1.09,1.13,1.17,1.20]],0.018,PLATE,PEL)
+for nm,zb,kr in (('AR_rim1',0.818,1.160),('AR_rim2',0.752,1.200)):
+    rr2=[min(r*kr,0.335) for r in r_rib]
+    loft(nm,[zb,zb+0.018],[rr2,rr2],0.012,TRIM,PEL)
+hem=[min(r*1.235,0.345) for r in r_rib]
+loft('AR_hem',[0.640,0.680],[hem,hem],0.014,TRIM,PEL)
+uz=[0.952,1.020,1.090,1.160,1.230,1.290]
+_uzs={b:(lambda p,bb=b: 1.0 if spinebone(p.z)==bb else 0.0) for b in ('spine01','spine02','spine03','spine04')}
+loft('AR_under',uz,[[min(r*1.006,0.30) for r in fit_ring(z,0.26)] for z in uz],0.010,PLATE,_uzs)
 def prim_mesh(name,bm,m,groups):
     me=bpy.data.meshes.new(name); bm.to_mesh(me); bm.free()
     o=bpy.data.objects.new(name,me); bpy.context.scene.collection.objects.link(o)
@@ -195,8 +199,6 @@ def disc(name,co,normal,r,depth,m,groups):
     bmesh.ops.rotate(bmx,verts=bmx.verts,cent=(0,0,0),matrix=q.to_matrix())
     bmesh.ops.translate(bmx,verts=bmx.verts,vec=co)
     return prim_mesh(name,bmx,m,groups)
-def spinebone(z):
-    return sorted([('spine01',1.184),('spine02',1.055),('spine03',0.999),('spine04',0.933)],key=lambda t:abs(t[1]-z))[0][0]
 for bz in (1.052,1.157,1.262):
     rr=fit_ring(bz,0.26)
     for k in range(5):
