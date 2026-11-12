@@ -71,13 +71,18 @@ def attach(o, groups, bind=True):
     if bind:
         o.parent=rig; o.parent_type='OBJECT'
         md=o.modifiers.new('Armature','ARMATURE'); md.object=rig
-def shell(name,keep,thick,idxskip=None,snapz=None):
+def shell(name,keep,thick,idxskip=None,snapz=None,flaty=None):
     o=human.copy(); o.data=human.data.copy(); o.name=name
     o.modifiers.clear(); o.shape_key_clear()
     for g in list(human.vertex_groups): o.vertex_groups.new(name=g.name)
     bpy.context.scene.collection.objects.link(o)
     bm=bmesh.new(); bm.from_mesh(o.data); bm.verts.ensure_lookup_table()
     bmesh.ops.delete(bm, geom=[f for f in bm.faces if (not keep(MW@f.calc_center_median())) or (idxskip is not None and f.index in idxskip)], context='FACES')
+    if flaty:
+        pl,fac=flaty; _MWi=MW.inverted()
+        for v in bm.verts:
+            w=MW@v.co
+            if w.y<pl: w=Vector((w.x,pl+(w.y-pl)*fac,w.z)); v.co=_MWi@w
     if snapz:
         bm.verts.ensure_lookup_table(); MWi=MW.inverted(); bnd=set()
         for e in bm.edges:
@@ -146,9 +151,9 @@ SL=Vector((0.205,-0.02,1.262)); SR=Vector((-0.205,-0.02,1.262))
 BLA=Vector((0.378,-0.132,1.058)); BLB=Vector((0.452,-0.183,0.998))
 BRA=Vector((-0.378,-0.132,1.058)); BRB=Vector((-0.452,-0.183,0.998))
 def tor(c): return math.hypot(c.x,c.y)<0.205
-shell('AR_chestA',lambda c:0.950<=c.z<=1.050 and tor(c),0.020,snapz=[0.950,1.050])
-shell('AR_chestB',lambda c:1.065<=c.z<=1.155 and tor(c),0.020,snapz=[1.065,1.155])
-shell('AR_chestC',lambda c:1.170<=c.z<=1.280 and tor(c),0.020,snapz=[1.170,1.280])
+shell('AR_chestA',lambda c:0.950<=c.z<=1.050 and tor(c),0.020,snapz=[0.950,1.050],flaty=(-0.138,0.42))
+shell('AR_chestB',lambda c:1.065<=c.z<=1.155 and tor(c),0.020,snapz=[1.065,1.155],flaty=(-0.138,0.42))
+shell('AR_chestC',lambda c:1.170<=c.z<=1.280 and tor(c),0.020,snapz=[1.170,1.280],flaty=(-0.138,0.42))
 shell('AR_pauldronLU',lambda c:(c-SL).length<0.118 and c.z>=1.255,0.022)
 shell('AR_pauldronLD',lambda c:(c-SL).length<0.130 and 1.198<=c.z<1.243,0.020)
 shell('AR_pauldronRU',lambda c:(c-SR).length<0.118 and c.z>=1.255,0.022)
@@ -179,6 +184,11 @@ def rivet(name,co,r,m,groups):
     bmx=bmesh.new(); bmesh.ops.create_icosphere(bmx,subdivisions=2,radius=r)
     bmesh.ops.translate(bmx,verts=bmx.verts,vec=co)
     return prim_mesh(name,bmx,m,groups)
+def boxpart(name,co,size,m,groups):
+    bmx=bmesh.new(); bmesh.ops.create_cube(bmx,size=1.0)
+    bmesh.ops.scale(bmx,verts=bmx.verts,vec=Vector(size))
+    bmesh.ops.translate(bmx,verts=bmx.verts,vec=Vector(co))
+    return prim_mesh(name,bmx,m,groups)
 def disc(name,co,normal,r,depth,m,groups):
     bmx=bmesh.new(); bmesh.ops.create_cone(bmx,cap_ends=True,segments=24,radius1=r,radius2=r,depth=depth)
     q=Vector((0,0,1)).rotation_difference(Vector(normal).normalized())
@@ -194,8 +204,9 @@ for bz in (1.052,1.157,1.262):
         i=int(((th+math.pi)/(2*math.pi)*NB))%NB
         pt=Vector(((rr[i]+0.030)*math.cos(th),(rr[i]+0.030)*math.sin(th),bz))
         rivet('RV_%.3f_%d'%(bz,k),pt,0.009,TRIM,{spinebone(bz):lambda p:1.0})
-rr=fit_ring(1.115,0.26); i=int((( -math.pi*0.5+math.pi)/(2*math.pi)*NB))%NB
-yt=rr[i]+0.034
+for (zb0,zb1) in ((0.958,1.042),(1.073,1.147),(1.178,1.272)):
+    boxpart('SP_%.3f'%zb0,Vector((0.0,-0.176,(zb0+zb1)/2)),Vector((0.028,0.022,(zb1-zb0)*0.92)),PLATE,{spinebone((zb0+zb1)/2):lambda p:1.0})
+yt=0.196
 disc('EM_disc',Vector((0.0,-yt,1.115)),(0,-1,0),0.045,0.014,TRIM,{'spine02':lambda p:1.0})
 disc('EM_core',Vector((0.0,-yt-0.011,1.115)),(0,-1,0),0.026,0.012,PLATE,{'spine02':lambda p:1.0})
 feet=[v for v in W if v.z<0.07]
