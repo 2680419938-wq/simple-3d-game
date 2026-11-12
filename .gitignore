@@ -1,0 +1,17 @@
+# 白名单式忽略：根目录默认全部忽略，只放行交付内容与源码
+/*
+!.gitignore
+!README.md
+!LICENSE
+!*.cmd
+!/AnimLib
+!/dragon-man-final
+!/web-preview
+!/dragon-men-rebuild
+
+# 兜底
+Thumbs.db
+Desktop.ini
+*.tmp
+~$*
+*.blend1

@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8" />
+<title>DragonMan · three.js 第三人称验证</title>
+<style>
+  html,body{margin:0;height:100%;background:#0d1015;overflow:hidden;font:13px/1.5 -apple-system,"Segoe UI",sans-serif;color:#dfe6f2}
+  canvas{display:block}
+  #hud{position:fixed;left:16px;top:14px;pointer-events:none;text-shadow:0 1px 3px #000}
+  #hud b{font-size:15px;letter-spacing:.5px}
+  #hud .k{color:#8fa3bf}
+  #stats{position:fixed;right:16px;top:14px;text-align:right;color:#8fa3bf;font-variant-numeric:tabular-nums}
+  #loading{position:fixed;inset:0;display:grid;place-items:center;color:#8fa3bf}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="hud">
+  <b>DragonMan · <span id="lodname">LOD0</span></b><br />
+  <span class="k">WASD 移动 · Shift 加速 · 鼠标左键拖拽转视角</span><br />
+  <span class="k" id="state"></span>
+</div>
+<div id="stats"></div>
+<div id="loading">loading DragonMan_Game.glb …</div>
+<script>
+  // Runs before the module script: under file:// the ES module is blocked by CORS,
+  // so this guard has to be a classic inline script or it never executes.
+  if (location.protocol === 'file:') {
+    document.getElementById('loading').innerHTML =
+      '<div style="text-align:center;line-height:1.9">' +
+      '<b style="font-size:16px">需要用 HTTP 打开，不能双击 index.html</b><br>' +
+      '浏览器在 file:// 下会拦截 ES 模块和 .glb 的读取，所以页面会一直停在 loading。<br><br>' +
+      '在 <code>web-preview</code> 目录执行 <code>pnpm dev</code>，然后访问<br>' +
+      '<a style="color:#7ea6ff;font-size:15px" href="http://localhost:5199/">http://localhost:5199/</a>' +
+      '</div>';
+  }
+</script>
+<script type="module" src="/src/main.js"></script>
+</body>
+</html>

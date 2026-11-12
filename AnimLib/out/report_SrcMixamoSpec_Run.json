@@ -1,0 +1,629 @@
+{
+ "src": "D:\\ai\\建模\\AnimLib\\test\\SrcMixamoSpec_Run.fbx",
+ "clip": "SrcMixamoSpec_Run",
+ "frames": 19,
+ "dur": 0.6,
+ "mapped": 17,
+ "unmapped_dst": [
+  "mixamorig:Root",
+  "mixamorig:Neck1",
+  "mixamorig:Head",
+  "mixamorig:LeftHand",
+  "mixamorig:LeftHandThumb1",
+  "mixamorig:LeftHandThumb2",
+  "mixamorig:LeftHandThumb3",
+  "mixamorig:LeftHandIndex1",
+  "mixamorig:LeftHandIndex2",
+  "mixamorig:LeftHandIndex3",
+  "mixamorig:LeftHandMiddle1",
+  "mixamorig:LeftHandMiddle2",
+  "mixamorig:LeftHandMiddle3",
+  "mixamorig:LeftHandRing1",
+  "mixamorig:LeftHandRing2",
+  "mixamorig:LeftHandRing3",
+  "mixamorig:RightHand",
+  "mixamorig:RightHandThumb1",
+  "mixamorig:RightHandThumb2",
+  "mixamorig:RightHandThumb3",
+  "mixamorig:RightHandIndex1",
+  "mixamorig:RightHandIndex2",
+  "mixamorig:RightHandIndex3",
+  "mixamorig:RightHandMiddle1",
+  "mixamorig:RightHandMiddle2",
+  "mixamorig:RightHandMiddle3",
+  "mixamorig:RightHandRing1",
+  "mixamorig:RightHandRing2",
+  "mixamorig:RightHandRing3",
+  "mixamorig:LeftToeBase",
+  "mixamorig:LeftToeEnd",
+  "mixamorig:LeftToe02End",
+  "mixamorig:LeftToe02End.001",
+  "mixamorig:LeftToe03Base",
+  "mixamorig:LeftToe03End",
+  "mixamorig:RightToeBase",
+  "mixamorig:RightToeEnd",
+  "mixamorig:RightToe02End",
+  "mixamorig:RightToe02End.001",
+  "mixamorig:RightToe03Base",
+  "mixamorig:RightToe03End",
+  "mixamorig:tail.001",
+  "mixamorig:Tail001b",
+  "mixamorig:tail.002",
+  "mixamorig:Tail002b",
+  "mixamorig:tail.003",
+  "mixamorig:Tail003b",
+  "mixamorig:tail.004",
+  "mixamorig:Tail004b",
+  "mixamorig:tail.005",
+  "mixamorig:Tail005b",
+  "mixamorig:tail.006",
+  "mixamorig:Tail006b",
+  "mixamorig:CTRL_hand_IK.L",
+  "mixamorig:CTRL_foot_IK.L",
+  "mixamorig:CTRL_elbow.L",
+  "mixamorig:CTRL_knee.L",
+  "mixamorig:CTRL_hand_IK.R",
+  "mixamorig:CTRL_foot_IK.R",
+  "mixamorig:CTRL_elbow.R",
+  "mixamorig:CTRL_knee.R"
+ ],
+ "unmapped_src": [],
+ "leg_ratio": 0.5288,
+ "stride_scale": 0.5288,
+ "knee_limit": 90.0,
+ "ground_push": "0",
+ "minz": [
+  -0.00093,
+  -0.071,
+  -0.09254,
+  -0.04029,
+  -0.04388,
+  -0.07686,
+  -0.11428,
+  -0.13591,
+  -0.15539,
+  -0.1618,
+  -0.12573,
+  -0.02127,
+  0.04857,
+  0.06391,
+  0.05814,
+  0.04705,
+  0.03417,
+  0.01469,
+  -0.00093
+ ],
+ "minz_final": [
+  0.0,
+  0.0,
+  0.0,
+  0.0,
+  0.0,
+  0.0,
+  -0.0,
+  0.0,
+  0.0,
+  0.0,
+  -0.0,
+  0.0,
+  0.04857,
+  0.06391,
+  0.05814,
+  0.04705,
+  0.03417,
+  0.01469,
+  0.0
+ ],
+ "knee_flex": {
+  "L": [
+   0.0,
+   63.0
+  ],
+  "R": [
+   0.0,
+   63.0
+  ]
+ },
+ "hips_bob": 0.1618,
+ "gait": [
+  {
+   "f": 1,
+   "flexL": 0.0,
+   "ankL": [
+    0.1901,
+    0.0887,
+    0.08
+   ],
+   "flexR": 0.0,
+   "ankR": [
+    -0.1901,
+    -0.0887,
+    0.1023
+   ],
+   "hips": [
+    0.1328,
+    0.1413,
+    0.6109
+   ]
+  },
+  {
+   "f": 2,
+   "flexL": 0.0,
+   "ankL": [
+    0.1901,
+    0.1953,
+    0.1617
+   ],
+   "flexR": 3.8,
+   "ankR": [
+    -0.1901,
+    -0.1913,
+    0.186
+   ],
+   "hips": [
+    0.1328,
+    0.1457,
+    0.6809
+   ]
+  },
+  {
+   "f": 3,
+   "flexL": 0.0,
+   "ankL": [
+    0.1901,
+    0.2921,
+    0.2123
+   ],
+   "flexR": 14.74,
+   "ankR": [
+    -0.1901,
+    -0.285,
+    0.2529
+   ],
+   "hips": [
+    0.1328,
+    0.1566,
+    0.7025
+   ]
+  },
+  {
+   "f": 4,
+   "flexL": 0.0,
+   "ankL": [
+    0.1901,
+    0.3636,
+    0.1923
+   ],
+   "flexR": 31.5,
+   "ankR": [
+    -0.1901,
+    -0.3498,
+    0.2722
+   ],
+   "hips": [
+    0.1328,
+    0.1691,
+    0.6502
+   ]
+  },
+  {
+   "f": 5,
+   "flexL": 0.0,
+   "ankL": [
+    0.1901,
+    0.401,
+    0.2166
+   ],
+   "flexR": 52.06,
+   "ankR": [
+    -0.1901,
+    -0.3746,
+    0.3522
+   ],
+   "hips": [
+    0.1328,
+    0.1772,
+    0.6538
+   ]
+  },
+  {
+   "f": 6,
+   "flexL": 10.94,
+   "ankL": [
+    0.1901,
+    0.4224,
+    0.2694
+   ],
+   "flexR": 63.0,
+   "ankR": [
+    -0.1901,
+    -0.3721,
+    0.4137
+   ],
+   "hips": [
+    0.1328,
+    0.1772,
+    0.6868
+   ]
+  },
+  {
+   "f": 7,
+   "flexL": 31.5,
+   "ankL": [
+    0.1901,
+    0.4185,
+    0.3288
+   ],
+   "flexR": 63.0,
+   "ankR": [
+    -0.1901,
+    -0.3638,
+    0.4266
+   ],
+   "hips": [
+    0.1328,
+    0.1691,
+    0.7242
+   ]
+  },
+  {
+   "f": 8,
+   "flexL": 48.26,
+   "ankL": [
+    0.1901,
+    0.375,
+    0.3496
+   ],
+   "flexR": 63.0,
+   "ankR": [
+    -0.1901,
+    -0.3402,
+    0.4059
+   ],
+   "hips": [
+    0.1328,
+    0.1566,
+    0.7458
+   ]
+  },
+  {
+   "f": 9,
+   "flexL": 59.2,
+   "ankL": [
+    0.1901,
+    0.3067,
+    0.3486
+   ],
+   "flexR": 63.0,
+   "ankR": [
+    -0.1901,
+    -0.2936,
+    0.3778
+   ],
+   "hips": [
+    0.1328,
+    0.1457,
+    0.7653
+   ]
+  },
+  {
+   "f": 10,
+   "flexL": 63.0,
+   "ankL": [
+    0.1901,
+    0.2252,
+    0.3245
+   ],
+   "flexR": 63.0,
+   "ankR": [
+    -0.1901,
+    -0.2226,
+    0.3451
+   ],
+   "hips": [
+    0.1328,
+    0.1413,
+    0.7717
+   ]
+  },
+  {
+   "f": 11,
+   "flexL": 59.2,
+   "ankL": [
+    0.1901,
+    0.1358,
+    0.2597
+   ],
+   "flexR": 63.0,
+   "ankR": [
+    -0.1901,
+    -0.136,
+    0.2879
+   ],
+   "hips": [
+    0.1328,
+    0.1457,
+    0.7357
+   ]
+  },
+  {
+   "f": 12,
+   "flexL": 48.26,
+   "ankL": [
+    0.1901,
+    0.0412,
+    0.1404
+   ],
+   "flexR": 63.0,
+   "ankR": [
+    -0.1901,
+    -0.0503,
+    0.1806
+   ],
+   "hips": [
+    0.1328,
+    0.1566,
+    0.6312
+   ]
+  },
+  {
+   "f": 13,
+   "flexL": 31.5,
+   "ankL": [
+    0.1901,
+    -0.0511,
+    0.1275
+   ],
+   "flexR": 63.0,
+   "ankR": [
+    -0.1901,
+    0.0171,
+    0.1669
+   ],
+   "hips": [
+    0.1328,
+    0.1691,
+    0.6099
+   ]
+  },
+  {
+   "f": 14,
+   "flexL": 10.94,
+   "ankL": [
+    0.1901,
+    -0.1269,
+    0.1572
+   ],
+   "flexR": 63.0,
+   "ankR": [
+    -0.1901,
+    0.0539,
+    0.1741
+   ],
+   "hips": [
+    0.1328,
+    0.1772,
+    0.6099
+   ]
+  },
+  {
+   "f": 15,
+   "flexL": 0.0,
+   "ankL": [
+    0.1901,
+    -0.1517,
+    0.1727
+   ],
+   "flexR": 52.06,
+   "ankR": [
+    -0.1901,
+    0.0808,
+    0.1643
+   ],
+   "hips": [
+    0.1328,
+    0.1772,
+    0.6099
+   ]
+  },
+  {
+   "f": 16,
+   "flexL": 0.0,
+   "ankL": [
+    0.1901,
+    -0.1306,
+    0.1521
+   ],
+   "flexR": 31.5,
+   "ankR": [
+    -0.1901,
+    0.0961,
+    0.1467
+   ],
+   "hips": [
+    0.1328,
+    0.1691,
+    0.6099
+   ]
+  },
+  {
+   "f": 17,
+   "flexL": 0.0,
+   "ankL": [
+    0.1901,
+    -0.084,
+    0.1198
+   ],
+   "flexR": 14.74,
+   "ankR": [
+    -0.1901,
+    0.0686,
+    0.1287
+   ],
+   "hips": [
+    0.1328,
+    0.1566,
+    0.6099
+   ]
+  },
+  {
+   "f": 18,
+   "flexL": 0.0,
+   "ankL": [
+    0.1901,
+    -0.0092,
+    0.0907
+   ],
+   "flexR": 3.8,
+   "ankR": [
+    -0.1901,
+    0.0031,
+    0.1105
+   ],
+   "hips": [
+    0.1328,
+    0.1457,
+    0.6099
+   ]
+  },
+  {
+   "f": 19,
+   "flexL": 0.0,
+   "ankL": [
+    0.1901,
+    0.0887,
+    0.08
+   ],
+   "flexR": 0.0,
+   "ankR": [
+    -0.1901,
+    -0.0887,
+    0.1023
+   ],
+   "hips": [
+    0.1328,
+    0.1413,
+    0.6109
+   ]
+  }
+ ],
+ "frames_meta": [
+  {
+   "f": 1,
+   "minz_before": -0.000934,
+   "minz_after": 0.0,
+   "minz": 0.0
+  },
+  {
+   "f": 2,
+   "minz_before": -0.071004,
+   "minz_after": 0.0,
+   "minz": 0.0
+  },
+  {
+   "f": 3,
+   "minz_before": -0.092536,
+   "minz_after": 0.0,
+   "minz": 0.0
+  },
+  {
+   "f": 4,
+   "minz_before": -0.040292,
+   "minz_after": 0.0,
+   "minz": 0.0
+  },
+  {
+   "f": 5,
+   "minz_before": -0.043884,
+   "minz_after": 0.0,
+   "minz": 0.0
+  },
+  {
+   "f": 6,
+   "minz_before": -0.076858,
+   "minz_after": 0.0,
+   "minz": 0.0
+  },
+  {
+   "f": 7,
+   "minz_before": -0.114275,
+   "minz_after": -0.0,
+   "minz": -0.0
+  },
+  {
+   "f": 8,
+   "minz_before": -0.13591,
+   "minz_after": 0.0,
+   "minz": 0.0
+  },
+  {
+   "f": 9,
+   "minz_before": -0.155391,
+   "minz_after": 0.0,
+   "minz": 0.0
+  },
+  {
+   "f": 10,
+   "minz_before": -0.161804,
+   "minz_after": 0.0,
+   "minz": 0.0
+  },
+  {
+   "f": 11,
+   "minz_before": -0.125733,
+   "minz_after": -0.0,
+   "minz": -0.0
+  },
+  {
+   "f": 12,
+   "minz_before": -0.021268,
+   "minz_after": 0.0,
+   "minz": 0.0
+  },
+  {
+   "f": 13,
+   "minz_before": 0.048571,
+   "minz_after": 0.048571,
+   "minz": 0.048571
+  },
+  {
+   "f": 14,
+   "minz_before": 0.063911,
+   "minz_after": 0.063911,
+   "minz": 0.063911
+  },
+  {
+   "f": 15,
+   "minz_before": 0.058145,
+   "minz_after": 0.058145,
+   "minz": 0.058145
+  },
+  {
+   "f": 16,
+   "minz_before": 0.047045,
+   "minz_after": 0.047045,
+   "minz": 0.047045
+  },
+  {
+   "f": 17,
+   "minz_before": 0.034174,
+   "minz_after": 0.034174,
+   "minz": 0.034174
+  },
+  {
+   "f": 18,
+   "minz_before": 0.014689,
+   "minz_after": 0.014689,
+   "minz": 0.014689
+  },
+  {
+   "f": 19,
+   "minz_before": -0.000934,
+   "minz_after": 0.0,
+   "minz": 0.0
+  }
+ ],
+ "glb_bytes": 10570896,
+ "blend": "D:\\ai\\建模\\AnimLib\\out\\DragonMan_Std_SrcMixamoSpec_Run.blend",
+ "glb": "D:\\ai\\建模\\AnimLib\\out\\DragonMan_Std_SrcMixamoSpec_Run.glb"
+}

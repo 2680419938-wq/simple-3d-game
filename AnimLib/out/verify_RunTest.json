@@ -1,0 +1,28 @@
+{
+ "clip": "RunTest",
+ "frames": 19,
+ "bones": 17,
+ "max_err_deg": 0.0,
+ "worst_bone": null,
+ "worst_frame": null,
+ "mean_err_deg": 0.0,
+ "per_bone_max": {
+  "hips": 0.0,
+  "leftarm": 0.0,
+  "leftfoot": 0.0,
+  "leftforearm": 0.0,
+  "leftleg": 0.0,
+  "leftshoulder": 0.0,
+  "leftupleg": 0.0,
+  "neck": 0.0,
+  "rightarm": 0.0,
+  "rightfoot": 0.0,
+  "rightforearm": 0.0,
+  "rightleg": 0.0,
+  "rightshoulder": 0.0,
+  "rightupleg": 0.0,
+  "spine": 0.0,
+  "spine1": 0.0,
+  "spine2": 0.0
+ }
+}

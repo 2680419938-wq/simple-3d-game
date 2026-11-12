@@ -1,0 +1,7 @@
+# 导入器：脚本与说明入库，中间产物不入库
+/out/*.glb
+/out/*.blend
+/out/*.blend1
+/out/renders/
+/in/*
+!/in/.gitkeep
