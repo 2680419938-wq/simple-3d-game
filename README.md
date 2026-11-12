@@ -45,6 +45,13 @@ Unity / Unreal / Godot / Blender。70 根骨、4 个材质、12 张 JPEG 贴图�
 - 手指/脚趾是刚性小岛，弯指节没有皮肤褶皱（资产结构，不是 rig 问题）
 - 源动作里没有的骨不会被驱动：小指、眼、下颌；尾巴由程序摆动接管
 
+## 同步
+
+仓库：https://gitee.com/lilhand/simple-3d-game （仓库名「简单3d游戏」）
+
+每改一次就推一次：双击 `同步到gitee.cmd`（或 `同步到gitee.cmd "改动说明"`）。
+它做三件事：`git add -A` → 有变化就提交 → `git push gitee main`。
+
 ## 许可
 
 角色资产 CC-BY 4.0（© ohmmi5955，出处 Sketchfab），使用时请保留署名。详见 `LICENSE`。
