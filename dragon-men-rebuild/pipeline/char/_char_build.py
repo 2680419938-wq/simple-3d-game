@@ -71,13 +71,23 @@ def attach(o, groups, bind=True):
     if bind:
         o.parent=rig; o.parent_type='OBJECT'
         md=o.modifiers.new('Armature','ARMATURE'); md.object=rig
-def shell(name,keep,thick,idxskip=None):
+def shell(name,keep,thick,idxskip=None,snapz=None):
     o=human.copy(); o.data=human.data.copy(); o.name=name
     o.modifiers.clear(); o.shape_key_clear()
     for g in list(human.vertex_groups): o.vertex_groups.new(name=g.name)
     bpy.context.scene.collection.objects.link(o)
     bm=bmesh.new(); bm.from_mesh(o.data); bm.verts.ensure_lookup_table()
     bmesh.ops.delete(bm, geom=[f for f in bm.faces if (not keep(MW@f.calc_center_median())) or (idxskip is not None and f.index in idxskip)], context='FACES')
+    if snapz:
+        bm.verts.ensure_lookup_table(); MWi=MW.inverted(); bnd=set()
+        for e in bm.edges:
+            if len(e.link_faces)==1:
+                bnd.add(e.verts[0]); bnd.add(e.verts[1])
+        for v in bnd:
+            w=MW@v.co
+            for zc in snapz:
+                if abs(w.z-zc)<0.030:
+                    w=Vector((w.x,w.y,zc)); v.co=MWi@w; break
     bm.to_mesh(o.data); bm.free()
     o.matrix_world=MW.copy()
     o.data.materials.clear(); o.data.materials.append(PLATE); o.data.materials.append(TRIM)
@@ -136,9 +146,9 @@ SL=Vector((0.205,-0.02,1.262)); SR=Vector((-0.205,-0.02,1.262))
 BLA=Vector((0.378,-0.132,1.058)); BLB=Vector((0.452,-0.183,0.998))
 BRA=Vector((-0.378,-0.132,1.058)); BRB=Vector((-0.452,-0.183,0.998))
 def tor(c): return math.hypot(c.x,c.y)<0.205
-shell('AR_chestA',lambda c:0.950<=c.z<=1.050 and tor(c),0.020)
-shell('AR_chestB',lambda c:1.065<=c.z<=1.155 and tor(c),0.020)
-shell('AR_chestC',lambda c:1.170<=c.z<=1.280 and tor(c),0.020)
+shell('AR_chestA',lambda c:0.950<=c.z<=1.050 and tor(c),0.020,snapz=[0.950,1.050])
+shell('AR_chestB',lambda c:1.065<=c.z<=1.155 and tor(c),0.020,snapz=[1.065,1.155])
+shell('AR_chestC',lambda c:1.170<=c.z<=1.280 and tor(c),0.020,snapz=[1.170,1.280])
 shell('AR_pauldronLU',lambda c:(c-SL).length<0.118 and c.z>=1.255,0.022)
 shell('AR_pauldronLD',lambda c:(c-SL).length<0.130 and 1.198<=c.z<1.243,0.020)
 shell('AR_pauldronRU',lambda c:(c-SR).length<0.118 and c.z>=1.255,0.022)
@@ -159,6 +169,35 @@ loft('AR_skirt1',[0.915,0.850,0.788],t1,0.018,PLATE,PEL,mk1)
 loft('AR_skirt2',[0.774,0.722,0.672],t2,0.018,PLATE,PEL,mk2)
 hem=[min(r*1.21,0.34) for r in r_rib]
 loft('AR_hem',[0.628,0.668],[hem,hem],0.014,TRIM,PEL)
+def prim_mesh(name,bm,m,groups):
+    me=bpy.data.meshes.new(name); bm.to_mesh(me); bm.free()
+    o=bpy.data.objects.new(name,me); bpy.context.scene.collection.objects.link(o)
+    me.materials.append(m)
+    for p in me.polygons: p.use_smooth=True
+    attach(o,groups); return o
+def rivet(name,co,r,m,groups):
+    bmx=bmesh.new(); bmesh.ops.create_icosphere(bmx,subdivisions=2,radius=r)
+    bmesh.ops.translate(bmx,verts=bmx.verts,vec=co)
+    return prim_mesh(name,bmx,m,groups)
+def disc(name,co,normal,r,depth,m,groups):
+    bmx=bmesh.new(); bmesh.ops.create_cone(bmx,cap_ends=True,segments=24,radius1=r,radius2=r,depth=depth)
+    q=Vector((0,0,1)).rotation_difference(Vector(normal).normalized())
+    bmesh.ops.rotate(bmx,verts=bmx.verts,cent=(0,0,0),matrix=q.to_matrix())
+    bmesh.ops.translate(bmx,verts=bmx.verts,vec=co)
+    return prim_mesh(name,bmx,m,groups)
+def spinebone(z):
+    return sorted([('spine01',1.184),('spine02',1.055),('spine03',0.999),('spine04',0.933)],key=lambda t:abs(t[1]-z))[0][0]
+for bz in (1.052,1.157,1.262):
+    rr=fit_ring(bz,0.26)
+    for k in range(5):
+        th=-math.pi*0.5+ (k-2)*math.pi*0.09
+        i=int(((th+math.pi)/(2*math.pi)*NB))%NB
+        pt=Vector(((rr[i]+0.030)*math.cos(th),(rr[i]+0.030)*math.sin(th),bz))
+        rivet('RV_%.3f_%d'%(bz,k),pt,0.009,TRIM,{spinebone(bz):lambda p:1.0})
+rr=fit_ring(1.115,0.26); i=int((( -math.pi*0.5+math.pi)/(2*math.pi)*NB))%NB
+yt=rr[i]+0.034
+disc('EM_disc',Vector((0.0,-yt,1.115)),(0,-1,0),0.045,0.014,TRIM,{'spine02':lambda p:1.0})
+disc('EM_core',Vector((0.0,-yt-0.011,1.115)),(0,-1,0),0.026,0.012,PLATE,{'spine02':lambda p:1.0})
 feet=[v for v in W if v.z<0.07]
 from mathutils import kdtree
 for side,sx in (('L',1),('R',-1)):
