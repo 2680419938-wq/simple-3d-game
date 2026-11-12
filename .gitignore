@@ -18,3 +18,12 @@ Desktop.ini
 
 # 本地提交说明草稿
 commitmsg.txt
+
+# 备份与临时产物
+dragon-man-final/_backup_*/
+dragon-man-final/_backup_walk2/
+__pycache__/
+*.pyc
+web-preview/_*/
+web-preview/_*.png
+
