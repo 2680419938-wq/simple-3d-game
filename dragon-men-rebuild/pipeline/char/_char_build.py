@@ -71,13 +71,13 @@ def attach(o, groups, bind=True):
     if bind:
         o.parent=rig; o.parent_type='OBJECT'
         md=o.modifiers.new('Armature','ARMATURE'); md.object=rig
-def shell(name,keep,thick):
+def shell(name,keep,thick,idxskip=None):
     o=human.copy(); o.data=human.data.copy(); o.name=name
     o.modifiers.clear(); o.shape_key_clear()
     for g in list(human.vertex_groups): o.vertex_groups.new(name=g.name)
     bpy.context.scene.collection.objects.link(o)
     bm=bmesh.new(); bm.from_mesh(o.data); bm.verts.ensure_lookup_table()
-    bmesh.ops.delete(bm, geom=[f for f in bm.faces if not keep(MW@f.calc_center_median())], context='FACES')
+    bmesh.ops.delete(bm, geom=[f for f in bm.faces if (not keep(MW@f.calc_center_median())) or (idxskip is not None and f.index in idxskip)], context='FACES')
     bm.to_mesh(o.data); bm.free()
     o.matrix_world=MW.copy()
     o.data.materials.clear(); o.data.materials.append(PLATE); o.data.materials.append(TRIM)
@@ -116,24 +116,33 @@ def cone(name,base,tip,r0,SEG,m,groups):
     me.materials.append(m)
     for p in me.polygons: p.use_smooth=True
     attach(o,groups); return o
-SHL=[Vector((0.20,-0.02,1.255)),Vector((-0.20,-0.02,1.255))]
-def chest(c): return 0.96<=c.z<=1.30 and abs(c.x)<=0.30 and all((c-s).length>0.125 for s in SHL)
+AW={}
+_ag={g.index for g in human.vertex_groups if g.name.startswith(('upperarm','lowerarm','hand','clavicle','shoulder'))}
+for v in human.data.vertices:
+    s=0.0
+    for ge in v.groups:
+        if ge.group in _ag: s=max(s,ge.weight)
+    AW[v.index]=s
+ARMF={p.index for p in human.data.polygons if max(AW.get(i,0.0) for i in p.vertices)>0.35}
+print('ARMF faces',len(ARMF))
+def chest(c): return 0.95<=c.z<=1.28 and abs(c.x)<=0.27
 def pL(c): return (c-Vector((0.205,-0.02,1.262))).length<0.118
 def pR(c): return (c-Vector((-0.205,-0.02,1.262))).length<0.118
 def sd(p,a,b):
     ab=b-a; t=max(0,min(1,(p-a).dot(ab)/ab.length_squared)); return (p-(a+ab*t)).length
-def brL(c): return sd(c,Vector((0.350,-0.11,1.080)),Vector((0.455,-0.185,0.990)))<0.070
-def brR(c): return sd(c,Vector((-0.350,-0.11,1.080)),Vector((-0.455,-0.185,0.990)))<0.070
-shell('AR_chest',chest,0.016)
+def brL(c): return sd(c,Vector((0.378,-0.132,1.058)),Vector((0.452,-0.183,0.998)))<0.058
+def brR(c): return sd(c,Vector((-0.378,-0.132,1.058)),Vector((-0.452,-0.183,0.998)))<0.058
+shell('AR_chest',chest,0.020,ARMF)
 shell('AR_pauldronL',pL,0.022); shell('AR_pauldronR',pR,0.022)
 shell('AR_bracerL',brL,0.014); shell('AR_bracerR',brR,0.014)
 PEL={'pelvis.L':lambda p:1.0 if p.x>=0 else 0.0,'pelvis.R':lambda p:1.0 if p.x<0 else 0.0}
 r_wai=fit_ring(0.955,0.24); r_sk=fit_ring(0.905,0.24)
 loft('AR_belt',[0.935,0.975],[r_wai,r_wai],0.016,TRIM,PEL)
-rows=[[min(r*k,0.34) for r in r_sk] for k in [1.02,1.04,1.06,1.07]]
-loft('AR_skirt',[0.915,0.845,0.775,0.705],rows,0.016,PLATE,PEL)
-hem=[min(r*1.09,0.36) for r in r_sk]
-loft('AR_hem',[0.655,0.692],[hem,hem],0.014,TRIM,PEL)
+r_rib=[r_sk[i]*(1.0+0.030*math.cos(10*2*math.pi*i/NB)) for i in range(NB)]
+rows=[[min(r*k,0.30) for r in r_rib] for k in [1.04,1.09,1.14,1.18]]
+loft('AR_skirt',[0.915,0.830,0.750,0.672],rows,0.018,PLATE,PEL)
+hem=[min(r*1.21,0.34) for r in r_rib]
+loft('AR_hem',[0.625,0.668],[hem,hem],0.014,TRIM,PEL)
 feet=[v for v in W if v.z<0.07]
 from mathutils import kdtree
 for side,sx in (('L',1),('R',-1)):
