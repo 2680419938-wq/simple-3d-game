@@ -86,12 +86,14 @@ def shell(name,keep,thick,idxskip=None):
     bpy.context.view_layer.objects.active=o; bpy.ops.object.modifier_apply(modifier='S')
     attach(o,{},bind=True)
     print('  %-12s v=%d g=%d'%(name,len(o.data.vertices),len(o.vertex_groups))); return o
-def loft(name,zs,rows,thick,m,groups):
+def loft(name,zs,rows,thick,m,groups,mask=None):
     bmx=bmesh.new(); rr=[]
     for z,rs in zip(zs,rows):
         rr.append([bmx.verts.new((math.cos(2*math.pi*i/NB)*rs[i], math.sin(2*math.pi*i/NB)*rs[i], z)) for i in range(NB)])
     for j in range(len(rr)-1):
-        for i in range(NB): bmx.faces.new((rr[j][i],rr[j][(i+1)%NB],rr[j+1][(i+1)%NB],rr[j+1][i]))
+        for i in range(NB):
+            if mask is not None and not mask(i): continue
+            bmx.faces.new((rr[j][i],rr[j][(i+1)%NB],rr[j+1][(i+1)%NB],rr[j+1][i]))
     me=bpy.data.meshes.new(name); bmx.to_mesh(me); bmx.free()
     o=bpy.data.objects.new(name,me); bpy.context.scene.collection.objects.link(o)
     me.materials.append(m)
@@ -126,23 +128,37 @@ for v in human.data.vertices:
 ARMF={p.index for p in human.data.polygons if max(AW.get(i,0.0) for i in p.vertices)>0.35}
 print('ARMF faces',len(ARMF))
 def chest(c): return 0.95<=c.z<=1.28 and abs(c.x)<=0.27
-def pL(c): return (c-Vector((0.205,-0.02,1.262))).length<0.118
-def pR(c): return (c-Vector((-0.205,-0.02,1.262))).length<0.118
 def sd(p,a,b):
     ab=b-a; t=max(0,min(1,(p-a).dot(ab)/ab.length_squared)); return (p-(a+ab*t)).length
-def brL(c): return sd(c,Vector((0.378,-0.132,1.058)),Vector((0.452,-0.183,0.998)))<0.058
-def brR(c): return sd(c,Vector((-0.378,-0.132,1.058)),Vector((-0.452,-0.183,0.998)))<0.058
-shell('AR_chest',chest,0.020,ARMF)
-shell('AR_pauldronL',pL,0.022); shell('AR_pauldronR',pR,0.022)
-shell('AR_bracerL',brL,0.014); shell('AR_bracerR',brR,0.014)
+def tt(p,a,b):
+    ab=b-a; return (p-a).dot(ab)/ab.length_squared
+SL=Vector((0.205,-0.02,1.262)); SR=Vector((-0.205,-0.02,1.262))
+BLA=Vector((0.378,-0.132,1.058)); BLB=Vector((0.452,-0.183,0.998))
+BRA=Vector((-0.378,-0.132,1.058)); BRB=Vector((-0.452,-0.183,0.998))
+def tor(c): return math.hypot(c.x,c.y)<0.205
+shell('AR_chestA',lambda c:0.950<=c.z<=1.050 and tor(c),0.020)
+shell('AR_chestB',lambda c:1.065<=c.z<=1.155 and tor(c),0.020)
+shell('AR_chestC',lambda c:1.170<=c.z<=1.280 and tor(c),0.020)
+shell('AR_pauldronLU',lambda c:(c-SL).length<0.118 and c.z>=1.255,0.022)
+shell('AR_pauldronLD',lambda c:(c-SL).length<0.130 and 1.198<=c.z<1.243,0.020)
+shell('AR_pauldronRU',lambda c:(c-SR).length<0.118 and c.z>=1.255,0.022)
+shell('AR_pauldronRD',lambda c:(c-SR).length<0.130 and 1.198<=c.z<1.243,0.020)
+shell('AR_bracerLA',lambda c:0.00<=tt(c,BLA,BLB)<=0.44 and sd(c,BLA,BLB)<0.060,0.016)
+shell('AR_bracerLB',lambda c:0.52<=tt(c,BLA,BLB)<=1.02 and sd(c,BLA,BLB)<0.060,0.016)
+shell('AR_bracerRA',lambda c:0.00<=tt(c,BRA,BRB)<=0.44 and sd(c,BRA,BRB)<0.060,0.016)
+shell('AR_bracerRB',lambda c:0.52<=tt(c,BRA,BRB)<=1.02 and sd(c,BRA,BRB)<0.060,0.016)
 PEL={'pelvis.L':lambda p:1.0 if p.x>=0 else 0.0,'pelvis.R':lambda p:1.0 if p.x<0 else 0.0}
 r_wai=fit_ring(0.955,0.24); r_sk=fit_ring(0.905,0.24)
 loft('AR_belt',[0.935,0.975],[r_wai,r_wai],0.016,TRIM,PEL)
 r_rib=[r_sk[i]*(1.0+0.030*math.cos(10*2*math.pi*i/NB)) for i in range(NB)]
-rows=[[min(r*k,0.30) for r in r_rib] for k in [1.04,1.09,1.14,1.18]]
-loft('AR_skirt',[0.915,0.830,0.750,0.672],rows,0.018,PLATE,PEL)
+t1=[[min(r*k,0.29) for r in r_rib] for k in [1.04,1.07,1.09]]
+t2=[[min(r*k,0.31) for r in r_rib] for k in [1.11,1.15,1.18]]
+mk1=lambda i: i%12!=0
+mk2=lambda i: i%12!=6
+loft('AR_skirt1',[0.915,0.850,0.788],t1,0.018,PLATE,PEL,mk1)
+loft('AR_skirt2',[0.774,0.722,0.672],t2,0.018,PLATE,PEL,mk2)
 hem=[min(r*1.21,0.34) for r in r_rib]
-loft('AR_hem',[0.625,0.668],[hem,hem],0.014,TRIM,PEL)
+loft('AR_hem',[0.628,0.668],[hem,hem],0.014,TRIM,PEL)
 feet=[v for v in W if v.z<0.07]
 from mathutils import kdtree
 for side,sx in (('L',1),('R',-1)):
@@ -172,13 +188,13 @@ c0=allv.mean(0); X=allv-c0
 u,s2,vt=np.linalg.svd(X,full_matrices=False); axis=vt[0]; proj=X@axis
 if allv[proj.argmin()][1]>allv[proj.argmax()][1]: axis=-axis; proj=-proj
 base=allv[proj.argmin()]
-tgt=Vector((0.0,0.80,-0.60)).normalized()
+tgt=Vector((0.34,0.70,-0.62)).normalized()
 rot=Vector(axis).rotation_difference(tgt).to_matrix().to_4x4()
-T=Matrix.Translation(Vector((0.0,0.13,0.90))) @ rot @ Matrix.Scale(0.52,4) @ Matrix.Translation(-Vector(base))
+T=Matrix.Translation(Vector((0.04,0.15,0.80))) @ rot @ Matrix.Scale(0.52,4) @ Matrix.Translation(-Vector(base))
 _ct=T @ Vector(allv.mean(0))
 print('TAIL centroid after T', tuple(round(x,3) for x in _ct))
-if _ct.y < 0.13:
-    _RZ=Matrix.Rotation(math.pi,4,'Z'); _B=Vector((0.0,0.13,0.90))
+if _ct.y < 0.24:
+    _RZ=Matrix.Rotation(math.pi,4,'Z'); _B=Vector((0.04,0.15,0.80))
     T=Matrix.Translation(_B) @ _RZ @ Matrix.Translation(-_B) @ T
     print('TAIL flipped 180 about Z')
 for o in tails:
