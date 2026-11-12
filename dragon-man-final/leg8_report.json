@@ -1,8 +1,8 @@
 {
- "src": "D:/ai/建模/dragon-men-rebuild/skin-work/DragonMan_W11_pa_legC_armx18.blend",
- "out": "D:/ai/建模/dragon-man-final/DragonMan_Leg7.glb",
+ "src": "D:/ai/建模/dragon-men-rebuild/skin-work/DragonMan_W11_pa_legC_wide2.blend",
+ "out": "D:/ai/建模/dragon-man-final/DragonMan_Leg8.glb",
  "mode": "walk",
- "bytes": 10459908,
+ "bytes": 10459580,
  "kw": {
   "export_format": "GLB",
   "use_selection": true,
