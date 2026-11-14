@@ -1,50 +1,58 @@
 # 简单 3d 游戏
 
-一个可以直接进引擎的 3D 角色资产工程：Q 版龙人武士（DragonMan），标准 Mixamo 命名骨架、T/A-Pose 双版、
-Idle / Run / Walk 三个动作、全身关节过渡几何，外加一个"把任意动作库的 FBX 套到这个角色上"的导入器。
+一个可以直接进引擎的 3D 角色资产工程 + three.js 网页预览。
 
-角色素材来自 Sketchfab 的 *Dragon men Character for game*（作者 ohmmi5955，CC-BY 4.0），
-本仓库做的是骨骼标准化、关节过渡、动作重定向与预览工具的工程化改造。
+**当前主角**：异形（Alien）——12 万三角、189 根骨（96 根驱动骨 + 93 根 scaleCompensation 辅助骨）、
+Reallusion Character Creator 标准人形骨架、自带 1 个 364 帧待机动画，2K 贴图版 21.7 MB。
+
+**历史资产**：Q 版龙人武士（DragonMan）——标准 Mixamo 命名骨架、T/A-Pose 双版、Idle / Run / Walk、
+全身关节过渡几何、Mixamo 动作导入器。保留在 `dragon-man-final/` 与 `dragon-men-rebuild/` 不动。
+
+## 异形主角（当前默认模型）
+
+| 指标 | 数值 |
+| --- | --- |
+| 文件 | `dragon-man-final/Alien_Idle_2k.glb`（21.7 MB） |
+| 原始素材 | `异形/character_alien_3d_model_by_oscar_creativo.glb`（437 MB，4K 贴图，仅本地保留，不进仓库） |
+| 三角数 / 网格 | 120,818 三角 / 12 个 skinned mesh |
+| 材质 / 贴图 | 12 个 PBR 材质，每个 BaseColor + ORM + Normal；导出时 4096 → 2048 WebP(q80) |
+| 骨骼 | 189 根（`CC_Base_*` 命名 + `_scaleCompensation` 辅助骨），96 根参与蒙皮 |
+| 动作 | 1 个：`6521517516544_TempMotion`，364 帧（24 fps ≈ 15.2 s）待机微动作 |
+| 朝向 / 单位 | 面向 +Z，Y-up，1 单位 = 1 米 |
+
+**已知限制**：只有待机动作，没有 Walk / Run。当前预览里按 WASD 是「位置硬移动 + 播待机」，
+所以走动时看起来像滑行。要补走路/跑步，二选一：
+
+1. Mixamo 下标准人形 FBX → 用 `AnimLib/` 的导入器重定向（异形是 CC 骨架，需先做 `CC_Base_*` ↔ `mixamorig:*` 对应表）；
+2. 用 Blender 对 `CC_Base_L/R_Thigh`、`Calf`、`Upperarm`、`Forearm`、`Spine` 打关键帧程序化生成。
 
 ## 目录
 
 | 路径 | 内容 |
 | --- | --- |
-| `dragon-man-final/` | **成品 GLB**（4 个）：T-Pose / A-Pose / Walk（含 Idle）/ 一个示例导入动作 |
-| `AnimLib/` | **动作导入器**：把 Mixamo 等标准命名人形 FBX/BVH 重定向到本角色 |
-| `web-preview/` | three.js 网页预览（Vite），能播动作、切 LOD |
-| `dragon-men-rebuild/` | 生成管线脚本（Blender Python）：骨架改名、A-Pose、关节袖套、动作重定向、导出与验收 |
-| `导入动作.cmd` | 一键导入：把 FBX 丢进 `AnimLib/in/` 双击即可 |
+| `dragon-man-final/` | **成品 GLB**：异形 `Alien_Idle_2k.glb` + 龙人 T/A-Pose、Walk、Run |
+| `异形/` | 异形原始 437 MB 素材（4K 原版，本地保留，不进仓库） |
+| `AnimLib/` | **动作导入器**：把 Mixamo 等标准命名人形 FBX/BVH 重定向到龙人 |
+| `web-preview/` | three.js 网页预览（零依赖 `node tools/serve.mjs`），能播动作、切模型 |
+| `dragon-men-rebuild/` | 龙人生成管线脚本（Blender Python） |
 | `启动预览.cmd` | 一键起本地预览服务 |
+| `同步到gitee.cmd` | 一键提交并推送 |
 
 ## 快速上手
 
 **看模型**：双击 `启动预览.cmd`，浏览器打开 http://127.0.0.1:5199/
-带参数（`?demo=walk` 播走路、`?lod=1|2` 切 LOD、`?glb=/DragonMan_Std_Walk.glb` 换文件）。
+带参数（`?glb=/Alien_Idle_2k.glb` 换模型、`?lod=1|2` 切龙人 LOD、`?yaw=45&pitch=10&dist=4` 定视角）。
 
-**进引擎**：直接把 `dragon-man-final/DragonMan_Std_TPose.glb`（建模态）或 `DragonMan_Std_Walk.glb`（含 Idle+Walk）拖进
-Unity / Unreal / Godot / Blender。70 根骨、4 个材质、12 张 JPEG 贴图、约 5.9 万三角。
+**进引擎**：把 `dragon-man-final/Alien_Idle_2k.glb` 拖进 Unity / Unreal / Godot / Blender。
+12 万三角、12 个材质、96 蒙皮骨。龙人用 `DragonMan_Std_Walk.glb`（70 骨、5.9 万三角）。
 
-**套动作**：
-```
-把 Mixamo 下载的 FBX（勾 In Place）放进 AnimLib\in\  ->  双击 导入动作.cmd
-```
-产物：`AnimLib\out\DragonMan_Std_<动作名>.glb`（含 Idle/Run/Walk + 新动作），
-同时复制到 `dragon-man-final/` 与 `web-preview/public/`，命令行会打印预览地址。
-
-## 角色指标（实测）
+## 角色指标（龙人，实测）
 
 - 身高 2.010 m，脚底 y=0，轴心在双脚踝中点；面向 +Z，Y-up，1 单位 = 1 米
 - 70 根骨，全部 Mixamo 命名（`mixamorig:` 前缀），含 4 指 × 3 节 × 左右 = 24 根指骨、12 根尾骨
-- 身体 26,718 顶点 / 76 个网格岛（分件拼装资产），成品三角数 5.88 万，四档 LOD 到 1.16 万
-- 尾巴已由 4.55 m 缩短到 2.08 m（尾根不动、整体等比 0.45，12 根尾骨与 3,342 个尾顶点同比例缩放）
-- 动作：Idle 4.000 s / Walk 1.0667 s（33 帧）/ Run 0.600 s；逐帧蒙皮最低点 ≥ 0
-
-## 已知限制
-
-- 腿长 0.4548 m（身高的 22%），写实人类动作套进来会深蹲、步幅被压缩 —— 选步幅小、频率快的动作
-- 手指/脚趾是刚性小岛，弯指节没有皮肤褶皱（资产结构，不是 rig 问题）
-- 源动作里没有的骨不会被驱动：小指、眼、下颌；尾巴由程序摆动接管
+- 成品三角数 5.88 万，四档 LOD 到 1.16 万
+- 动作：Idle 4.000 s / Walk 1.0667 s（33 帧）/ Run 0.600 s
+- 旧资产腿短（腿长仅身高 22%）是它看起来蹲着的原因，新主角换成正常比例人形后已不存在
 
 ## 同步
 
@@ -53,6 +61,11 @@ Unity / Unreal / Godot / Blender。70 根骨、4 个材质、12 张 JPEG 贴图�
 每改一次就推一次：双击 `同步到gitee.cmd`（或 `同步到gitee.cmd "改动说明"`）。
 它做三件事：`git add -A` → 有变化就提交 → `git push gitee main`。
 
-## 许可
+## 许可与署名
 
-角色资产 CC-BY 4.0（© ohmmi5955，出处 Sketchfab），使用时请保留署名。详见 `LICENSE`。
+- **异形主角**：*Character Alien 3d model* by **Oscar Creativo**（Sketchfab），授权 **CC BY-NC 4.0**
+  （署名 + 非商用）。出处：https://sketchfab.com/3d-models/character-alien-3d-model-by-oscar-creativo-d25e65efd50c4ba691e1d5dfa1551ccc
+  本项目对该素材做了贴图降采样（4096→2048 WebP）与 GLB 重导出，**未减面**。
+- **龙人（历史资产）**：*Dragon men Character for game* by ohmmi5955，CC-BY 4.0。
+
+使用本项目时请保留以上两行署名。
