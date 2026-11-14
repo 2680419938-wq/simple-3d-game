@@ -103,8 +103,8 @@ let mixer = null;
 let model = null;
 const clips = { idle: null, walk: null, run: null };
 const actions = { idle: null, walk: null, run: null };
-const WALK_SPEED = 0.61;   // authored walk: 0.324 m per side / 1.0667 s
-const RUN_SPEED = 2.83;    // authored run: 0.85 m stride, 0.6 s cycle
+const WALK_SPEED = 0.66;   // 异形 walk：36.4 帧/循环 @24fps，单脚支撑位移 0.50 m → 0.66 m/s
+const RUN_SPEED = 1.35;    // 无 Run 动作，Shift 走快一点（同一 walk 循环加时间缩放）
 let curAnim = 'idle';
 const clock = new THREE.Clock();
 
@@ -122,7 +122,7 @@ const glbUrl = glbParam
   ? (glbParam.startsWith('/') ? glbParam : '/' + glbParam)
   : lodParam === '1' ? '/DragonMan_Game_LOD1.glb'
   : lodParam === '2' ? '/DragonMan_Game_LOD2.glb'
-  : '/Alien_Idle_2k.glb';
+  : '/Alien_Walk_2k.glb';
 const freezeT = params.has('freeze') ? parseFloat(params.get('freeze')) : null; // __freezeT
 new GLTFLoader().load(glbUrl, (gltf) => {
   model = gltf.scene;
@@ -141,7 +141,7 @@ new GLTFLoader().load(glbUrl, (gltf) => {
   mixer = new THREE.AnimationMixer(model);
   // 34-bone package ships Idle_Lively + Walk; pick each by name, fall back to first clip
   const byName = (n) => gltf.animations.find((a) => a.name === n);
-  clips.idle = byName('Idle_Lively') || gltf.animations[0] || null;
+  clips.idle = byName('Idle') || byName('Idle_Lively') || gltf.animations[0] || null;
   clips.walk = byName('Walk') || null;
   clips.run = byName('Run') || null;
   if (clips.idle) { actions.idle = mixer.clipAction(clips.idle); actions.idle.play(); }
@@ -168,7 +168,7 @@ new GLTFLoader().load(glbUrl, (gltf) => {
   const clip0 = clips.idle;
   document.getElementById('lodname').textContent =
     lodName + ' · ' + gltf.animations.map((a) => a.name + ' ' + a.duration.toFixed(2) + 's').join(' + ') +
-    (hasRun ? '' : ' · 仅待机（无 Walk/Run，移动时滑行）');
+    (hasRun ? '' : ' · 无 Run（Shift = 快走）');
   window.__clips = { hasRun, names: gltf.animations.map((a) => a.name) };
   window.__ready = true;
   console.log('clips:', gltf.animations.map((a) => a.name + ' ' + a.duration.toFixed(2) + 's').join(', '));
