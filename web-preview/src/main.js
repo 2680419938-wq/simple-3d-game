@@ -60,7 +60,7 @@ scene.add(grid);
 const rig = {
   yaw: 0.62, // 3/4 front view so the face and the tail both read
   pitch: 0.2,
-  dist: 6.2, // __camParams
+  dist: 4.0, // __camParams
   target: new THREE.Vector3(0, 1.1, 0),
 };
 
@@ -164,11 +164,11 @@ new GLTFLoader().load(glbUrl, (gltf) => {
   }
 
   document.getElementById('loading').remove();
-  const lodName = { '0': 'LOD0', '1': 'LOD1', '2': 'LOD2' }[lodParam] || (glbParam ? glbParam.split('/').pop() : '标准包 70 骨');
+  const lodName = { '0': 'LOD0', '1': 'LOD1', '2': 'LOD2' }[lodParam] || glbUrl.split('/').pop();
   const clip0 = clips.idle;
   document.getElementById('lodname').textContent =
     lodName + ' · ' + gltf.animations.map((a) => a.name + ' ' + a.duration.toFixed(2) + 's').join(' + ') +
-    (hasRun ? '' : ' · 无 Run 动作（Shift 时加快走路）');
+    (hasRun ? '' : ' · 仅待机（无 Walk/Run，移动时滑行）');
   window.__clips = { hasRun, names: gltf.animations.map((a) => a.name) };
   window.__ready = true;
   console.log('clips:', gltf.animations.map((a) => a.name + ' ' + a.duration.toFixed(2) + 's').join(', '));
