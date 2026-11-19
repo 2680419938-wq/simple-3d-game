@@ -56,7 +56,13 @@ export function setupForestLook(scene, renderer) {
   const hemi = new THREE.HemisphereLight(0xbcccd8, 0x3c4234, 0.55);
   scene.add(hemi);
   renderer.toneMappingExposure = 0.92;
-  return { sun, sunDir, sky };
+  return {
+    sun, sunDir, sky,
+    setSunDir(d) {
+      sunDir.copy(d).normalize();
+      if (sky.material.uniforms && sky.material.uniforms.sunDir) sky.material.uniforms.sunDir.value.copy(sunDir);
+    },
+  };
 }
 
 /** 树干碰撞：取每根枝干网格里 y<1.3 m 的顶点，算 XZ 包围盒 */

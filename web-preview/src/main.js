@@ -148,6 +148,7 @@ const dbgEl = document.getElementById('dbg');
 const dbg = (s) => { if (dbgEl && params.has('dbg')) dbgEl.textContent += s + '\n'; };
 let forestLook = null;
 let atmo = null;
+let sunT = 0;
 if (useForest) {
   forestLook = setupForestLook(scene, renderer);
   atmo = addAtmo(scene, forestLook.sunDir);
@@ -417,6 +418,16 @@ function update(dt) {
     forestLook.sun.shadow.camera.updateProjectionMatrix();
     forestLook.sky.position.copy(camera.position);
     if (atmo) atmo.update(dt, model.position);
+    sunT += dt;
+    if (sunT > 0.1) {          // 太阳缓慢移动：方位 ±20°、仰角 8~14°，光柱与天穹跟着同步
+      sunT = 0;
+      const t = performance.now() / 1000;
+      const az = -0.55 + Math.sin(t / 47) * 0.35;
+      const el = 0.20 + Math.sin(t / 61) * 0.05;
+      const d = new THREE.Vector3(Math.sin(az) * Math.cos(el), Math.sin(el), Math.cos(az) * Math.cos(el)).normalize();
+      forestLook.setSunDir(d);
+      if (atmo) atmo.setSunDir(d);
+    }
   }
   key.position.set(model ? model.position.x + 5.5 : 5.5, 9, model ? model.position.z + 4.5 : 4.5);
   ground.position.set(model ? model.position.x : 0, 0, model ? model.position.z : 0);

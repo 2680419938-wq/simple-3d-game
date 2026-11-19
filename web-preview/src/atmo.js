@@ -90,6 +90,10 @@ export function addAtmo(scene, sunDir) {
   }
 
   return {
+    setSunDir(d) {
+      const q2 = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.clone().normalize().negate());
+      for (const s of shafts) s.quaternion.copy(q2);
+    },
     update(dt, focus) {
       for (const s of shafts) {
         s.userData.t = (s.userData.t || 0) + dt * s.userData.sp;
