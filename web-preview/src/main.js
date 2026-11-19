@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { createWorld, stepVertical } from './world.js';
+import { setupForestLook, loadForest } from './forest.js';
 
 const canvas = document.getElementById('c');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
@@ -17,7 +18,9 @@ const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x0e1116);
 scene.fog = new THREE.Fog(0x0e1116, 22, 60);
 
-const camera = new THREE.PerspectiveCamera(48, window.innerWidth / window.innerHeight, 0.1, 200);
+const params = new URLSearchParams(location.search);
+const useForest = params.get('scene') !== 'arena';   // 默认森林场景，?scene=arena 回木箱场地
+const camera = new THREE.PerspectiveCamera(48, window.innerWidth / window.innerHeight, 0.1, 520);
 
 const pmrem = new THREE.PMREMGenerator(renderer);
 scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
@@ -51,13 +54,17 @@ const ground = new THREE.Mesh(
 ground.receiveShadow = true;
 scene.add(ground);
 
-const world = createWorld(scene);
+const world = createWorld(scene, { arena: !useForest, orbs: !useForest });
 
 const grid = new THREE.GridHelper(60, 60, 0x3d4657, 0x22262e);
 grid.material.transparent = true;
 grid.material.opacity = 0.5;
 grid.position.y = 0.002;
 scene.add(grid);
+
+if (useForest) {
+  for (const o of [hemi, key, rim, ground, grid]) scene.remove(o);
+}
 
 // ---- third person camera rig ----
 const rig = {
@@ -93,7 +100,6 @@ if (location.protocol === 'file:') {
     '<a style="color:#7ea6ff" href="http://localhost:5199/">http://localhost:5199/</a>';
 }
 
-const params = new URLSearchParams(location.search);
 const demo = params.get('demo');
 const lodParam = params.get('lod');
 if (demo === 'walk' || demo === 'run') keys.add('KeyW');
@@ -128,6 +134,30 @@ function setAnim(name) {
   to.time = 0; to.play();
   if (from) from.crossFadeTo(to, 0.25, false);
   curAnim = name;
+}
+
+const dbgEl = document.getElementById('dbg');
+const dbg = (s) => { if (dbgEl && params.has('dbg')) dbgEl.textContent += s + '\n'; };
+let forestLook = null;
+if (useForest) {
+  forestLook = setupForestLook(scene, renderer);
+  loadForest(scene, '/Forest_Morning.glb', (res) => {
+    world.addBoxes(res.boxes);
+    const pts = [];
+    for (let i = 0; i < 12; i++) {
+      const a = (i / 12) * Math.PI * 2 + 0.35;
+      pts.push([Math.cos(a) * (5.5 + (i % 3) * 3.0), 0.55, Math.sin(a) * (5.5 + (i % 3) * 3.0)]);
+    }
+    world.addOrbs(pts);
+    window.__forest = { trunks: res.boxes.length, orbs: world.total };
+    const bb = new THREE.Box3().setFromObject(res.root);
+    dbg('forest ok: trunks ' + res.boxes.length + ' orbs ' + world.total);
+    dbg('bbox ' + bb.min.toArray().map((v) => v.toFixed(1)).join(',') + ' -> ' + bb.max.toArray().map((v) => v.toFixed(1)).join(','));
+    const widths = res.boxes.map((b) => Math.max(b.maxx - b.minx, b.maxz - b.minz)).sort((a, b) => b - a);
+    dbg('trunk w max ' + widths[0].toFixed(2) + ' med ' + widths[Math.floor(widths.length / 2)].toFixed(2));
+    dbg('boxes ' + res.boxes.slice(0, 3).map((b) => '[' + ((b.minx + b.maxx) / 2).toFixed(1) + ',' + ((b.minz + b.maxz) / 2).toFixed(1) + ' w' + Math.max(b.maxx - b.minx, b.maxz - b.minz).toFixed(1) + ']').join(' '));
+    console.log('forest ready: trunks', res.boxes.length, 'orbs', world.total);
+  }, (e) => { dbg('forest ERR ' + (e && e.message)); console.error('forest load failed', e); });
 }
 
 const glbParam = params.get('glb'); // ?glb=/DragonMan_Std_TPose.glb
@@ -193,7 +223,9 @@ new GLTFLoader().load(glbUrl, (gltf) => {
   }
 
   document.getElementById('loading').remove();
-  const lodName = { '0': 'LOD0', '1': 'LOD1', '2': 'LOD2' }[lodParam] || glbUrl.split('/').pop();
+  const lodName = useForest
+    ? 'Forest_Morning + ' + glbUrl.split('/').pop()
+    : { '0': 'LOD0', '1': 'LOD1', '2': 'LOD2' }[lodParam] || glbUrl.split('/').pop();
   const clip0 = clips.idle;
   document.getElementById('lodname').textContent = lodName;
   document.getElementById('cliplist').textContent =
@@ -319,7 +351,7 @@ function update(dt) {
     if (!finished) {
       collected += world.tick(dt, performance.now() / 1000, { x: model.position.x, y: py, z: model.position.z });
       playTime += dt;
-      if (collected >= world.total) { finished = true; jumpT = 0; }
+      if (world.total > 0 && collected >= world.total) { finished = true; jumpT = 0; }
     } else {
       world.tick(dt, performance.now() / 1000, { x: 1e9, y: 0, z: 0 });
     }
@@ -346,6 +378,13 @@ function update(dt) {
   else camera.position.lerp(desiredCam, Math.min(1, dt * 6));
   camera.lookAt(rig.target);
 
+  if (forestLook && model) {
+    forestLook.sun.position.copy(model.position).addScaledVector(forestLook.sunDir, 60);
+    forestLook.sun.target.position.copy(model.position);
+    forestLook.sun.target.updateMatrixWorld();
+    forestLook.sun.shadow.camera.updateProjectionMatrix();
+    forestLook.sky.position.copy(camera.position);
+  }
   key.position.set(model ? model.position.x + 5.5 : 5.5, 9, model ? model.position.z + 4.5 : 4.5);
   ground.position.set(model ? model.position.x : 0, 0, model ? model.position.z : 0);
   grid.position.x = ground.position.x;

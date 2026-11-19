@@ -12,7 +12,9 @@ export function stepVertical(p, dt, g, gh) {
   return p;
 }
 
-export function createWorld(scene) {
+export function createWorld(scene, opts = {}) {
+  const useArena = opts.arena !== false;
+  const useOrbs = opts.orbs !== false;
   const colliders = [];   // { minx, maxx, minz, maxz, top }
   const orbs = [];
   const group = new THREE.Group();
@@ -40,6 +42,7 @@ export function createWorld(scene) {
 
   // 边界墙（20x20 的场子）
   const R = 10, T = 0.6, H = 3;
+  if (useArena) {
   block(0, -R, 2 * R + T, H, T, wallMat);
   block(0, R, 2 * R + T, H, T, wallMat);
   block(-R, 0, T, H, 2 * R + T, wallMat);
@@ -58,6 +61,7 @@ export function createWorld(scene) {
   block(-1.4, 3.0, 1.2, 0.5, 1.2);
   block(-2.8, 3.0, 1.4, 1.05, 1.4);
   block(6.4, -4.4, 1.4, 0.7, 1.4);
+  }
 
   // 收集球：地面一圈 + 平台顶
   const orbMat = new THREE.MeshBasicMaterial({ color: 0x9df4ff, toneMapped: false });
@@ -73,6 +77,7 @@ export function createWorld(scene) {
     group.add(ring);
     orbs.push({ mesh: m, ring, base: y, taken: false, x, z });
   }
+  if (useOrbs) {
   for (let i = 0; i < 6; i++) {
     const a = (i / 6) * Math.PI * 2 + 0.4;
     orb(Math.cos(a) * 6.6, 0.55, Math.sin(a) * 6.6);
@@ -83,11 +88,14 @@ export function createWorld(scene) {
   orb(-1.0, 0.45 + 0.55, 6.0);
   orb(1.0, 0.9 + 0.55, 6.2);
   orb(3.0, 1.35 + 0.55, 6.2);
+  }
 
   return {
     colliders,
     orbs,
-    total: orbs.length,
+    get total() { return orbs.length; },
+    addBoxes(list) { for (const b of list) colliders.push(b); },
+    addOrbs(pts) { for (const p of pts) orb(p[0], p[1] === undefined ? 0.55 : p[1], p[2]); },
     /** 当前位置可站立的最高面（低于脚上方 0.4 m 的顶面才算） */
     groundAt(x, z, y) {
       let best = 0;

@@ -66,6 +66,21 @@ Reallusion Character Creator 标准人形骨架、**自带走路动作（10 个�
 **进引擎**：把 `dragon-man-final/Alien_Walk_Jump_2k.glb` 拖进 Unity / Unreal / Godot / Blender。
 12 万三角、12 个材质、96 蒙皮骨、四个动作（Walk / Idle / Jump / Run）。龙人用 `DragonMan_Std_Walk.glb`（70 骨、5.9 万三角）。
 
+## 场景：晨雾森林（默认）
+
+游戏跑在你自己做的那片森林里（`D:/ai/数据分析/blender-mcp/forest_birds2.blend` → `dragon-man-final/Forest_Morning.glb`）。
+
+- 原 Blender 场景 113 个网格 / 185 万三角 / 全程序化材质（Bark 噪波、Leaf+Grass 顶点色、体积雾），无法直接当游戏资源，
+  管线是：删灯光相机与体积雾网格 → **Draco 压缩导出**（33.4 MB → **4.7 MB**）→ three.js 里重建光照。
+- 光照按原场景参数复现：低角度晨光（sun_elevation 0.175 → 太阳仰角约 10°，长投影）、`FogExp2` 0.024 的冷灰雾、
+  天空穹顶用 `ShaderMaterial` 做水平渐变（地平 #d7dde0 → 天顶 #8fb0c8，太阳方向加暖色辉光）、曝光 0.92。
+- 材质按名字重映射（原材质是节点程序化的，glTF 只剩名字）：Bark 深褐、Ground 灰绿、GrassM 绿、Leaf 用自带顶点色
+  `leafcol`（GLB 里是 COLOR_0）、BirdSil 近黑；体积雾 `MorningFog` 网格直接丢弃，改由 three.js 的 fog 代替。
+- 碰撞：加载后遍历 `*_Br_` 枝干网格，取 y<1.3 m 的顶点算 XZ 包围盒当树干（45 棵，中位宽 1.17 m），玩家圆半径 0.55 m，
+  所以贴着树走会被挡住；树林无高低差，站台逻辑不参与。
+- 收集球改成绕原点两圈的 12 个点，点位不落在树干里。
+- `?scene=arena` 可回到木箱场地测跳跃与踩台面。
+
 ## 玩法原型（three.js，进行中）
 
 20 × 20 的场地里**收集 12 个青色球**，左上角显示进度和计时，收满后显示通关时间，按 R 重开。
