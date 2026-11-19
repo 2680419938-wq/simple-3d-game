@@ -3,7 +3,7 @@
 一个可以直接进引擎的 3D 角色资产工程 + three.js 网页预览。
 
 **当前主角**：异形（Alien）——12 万三角、189 根骨（96 根驱动骨 + 93 根 scaleCompensation 辅助骨）、
-Reallusion Character Creator 标准人形骨架、**自带走路动作（10 个循环）+ 脚本生成的待机**，2K 贴图版 24.6 MB。
+Reallusion Character Creator 标准人形骨架、**自带走路动作（10 个循环）+ 脚本生成的待机 + Mixamo 重定向的跳跃**，2K 贴图版 24.1 MB。
 
 **历史资产**：Q 版龙人武士（DragonMan）——标准 Mixamo 命名骨架、T/A-Pose 双版、Idle / Run / Walk、
 全身关节过渡几何、Mixamo 动作导入器。保留在 `dragon-man-final/` 与 `dragon-men-rebuild/` 不动。
@@ -12,13 +12,14 @@ Reallusion Character Creator 标准人形骨架、**自带走路动作（10 个�
 
 | 指标 | 数值 |
 | --- | --- |
-| 文件 | `dragon-man-final/Alien_Walk_2k.glb`（24.6 MB） |
+| 文件 | `dragon-man-final/Alien_Walk_Jump_2k.glb`（24.1 MB） |
 | 原始素材 | `异形/character_alien_3d_model_by_oscar_creativo.glb`（437 MB，4K 贴图，仅本地保留，不进仓库） |
 | 三角数 / 网格 | 120,818 三角 / 12 个 skinned mesh |
 | 材质 / 贴图 | 12 个 PBR 材质，每个 BaseColor + ORM + Normal；导出时 4096 → 2048 WebP(q80) |
 | 骨骼 | 189 根（`CC_Base_*` 命名 + `_scaleCompensation` 辅助骨），96 根参与蒙皮 |
 | 动作 A | `Walk` 15.17 s = **10 个完整走路循环**（36.44 帧/循环 @24 fps，原地循环、无根位移） |
 | 动作 B | `Idle` 3.00 s，脚本生成（脊柱呼吸 + 头部微摆 + 髋部 6 mm 起伏），腿部保持站立 |
+| 动作 C | `Jump` 1.92 s（46 帧 @24 fps，Mixamo `Jumping.fbx` 重定向）——起跳蓄力 → 腾空收腿（髋部升 0.56 m）→ 落地缓冲，原地无根位移，逐帧贴地（最低点 0.002 m） |
 | 步速 | 单脚支撑位移 0.50 m / 17–19 帧 → **0.66 m/s**；按住 Shift 快走 → **1.19 m/s**（timeScale 1.8）；预览里 `WALK_SPEED` 与它对齐，脚不打滑 |
 | 朝向 / 单位 | 面向 +Z，Y-up，1 单位 = 1 米，脚底 y≈0（逐帧最低点 0.005 m） |
 
@@ -26,18 +27,22 @@ Reallusion Character Creator 标准人形骨架、**自带走路动作（10 个�
 双脚交替支撑、髋部起伏 3.7 cm、脚踝抬升 16 cm、髋部前后位移为 0（原地循环），10 个循环首尾相接。
 所以直接当走路用，另用脚本生成了一个真正的待机（`异形/build_walk_idle.py`）。
 
-**关于「跑步」**：模型只有 Walk / Idle 两个动作，没有独立的 Run 姿态。按住 Shift 是把同一个
+**关于「跑步」**：模型只有 Walk / Idle / Jump 三个动作，没有独立的 Run 姿态。按住 Shift 是把同一个
 Walk 循环加速到 1.8 倍播放（`RUN_SPEED = 1.19` m/s），当作快走/小跑用，脚不打滑。
 要补真 Run，用 `AnimLib/mixamo_retarget.py` 重定向 Mixamo 跑步 FBX（已跑通：去掉根位移 + 逐帧贴地
 + 可加前倾/低头/收肘的风格化，参数见脚本头注释）。
+
+**关于跳跃**：`AnimLib/alien_jump_build.py` 把 Mixamo 的 Jumping 动作重定向到 CC_Base 骨架，
+逐帧把最低顶点抬到 ≥0.002 m（起跳/落地各约 5 cm 抬升），导出时保留 Idle / Walk / Jump 三条 action，
+并清掉了导入时 Mixamo 的临时骨架与模型里的一颗无用 Icosphere。预览里按 **空格** 触发一次（timeScale 1.35）。
 
 ## 目录
 
 | 路径 | 内容 |
 | --- | --- |
-| `dragon-man-final/` | **成品 GLB**：异形 `Alien_Walk_2k.glb` + 龙人 T/A-Pose、Walk、Run |
+| `dragon-man-final/` | **成品 GLB**：异形 `Alien_Walk_Jump_2k.glb` + 龙人 T/A-Pose、Walk、Run |
 | `异形/` | 异形原始 437 MB 素材（4K 原版，本地保留，不进仓库） |
-| `AnimLib/` | **动作导入器**：`retarget_import.py`（Mixamo → 龙人）、`mixamo_retarget.py`（Mixamo → 异形 CC 骨架，含去根位移/逐帧贴地）、`style_run.py`（前倾/低头/收肘风格化）、`ground_run.py`（逐帧抬升防穿地） |
+| `AnimLib/` | **动作导入器**：`retarget_import.py`（Mixamo → 龙人）、`mixamo_retarget.py`（Mixamo → 异形 CC 骨架，含去根位移/逐帧贴地）、`style_run.py`（前倾/低头/收肘风格化）、`ground_run.py`（逐帧抬升防穿地）、`alien_jump_build.py`（重定向 Jumping.fbx → Idle/Walk/Jump 打包） |
 | `web-preview/` | three.js 网页预览（零依赖 `node tools/serve.mjs`），能播动作、切模型 |
 | `dragon-men-rebuild/` | 龙人生成管线脚本（Blender Python） |
 | `启动预览.cmd` | 一键起本地预览服务 |
@@ -46,10 +51,11 @@ Walk 循环加速到 1.8 倍播放（`RUN_SPEED = 1.19` m/s），当作快走/�
 ## 快速上手
 
 **看模型**：双击 `启动预览.cmd`，浏览器打开 http://127.0.0.1:5199/
-带参数（`?glb=/Alien_Walk_2k.glb` 换模型、`?lod=1|2` 切龙人 LOD、`?yaw=45&pitch=10&dist=4` 定视角）。
+带参数（`?glb=/Alien_Walk_Jump_2k.glb` 换模型、`?lod=1|2` 切龙人 LOD、`?yaw=45&pitch=10&dist=4` 定视角、`?jump=1` 自动起跳）。
+按键：WASD 移动、Shift 快走、**空格跳跃**、鼠标左键拖动转视角、滚轮缩放。
 
-**进引擎**：把 `dragon-man-final/Alien_Walk_2k.glb` 拖进 Unity / Unreal / Godot / Blender。
-12 万三角、12 个材质、96 蒙皮骨、两个动作（Walk / Idle）。龙人用 `DragonMan_Std_Walk.glb`（70 骨、5.9 万三角）。
+**进引擎**：把 `dragon-man-final/Alien_Walk_Jump_2k.glb` 拖进 Unity / Unreal / Godot / Blender。
+12 万三角、12 个材质、96 蒙皮骨、三个动作（Walk / Idle / Jump）。龙人用 `DragonMan_Std_Walk.glb`（70 骨、5.9 万三角）。
 
 ## 角色指标（龙人，实测）
 

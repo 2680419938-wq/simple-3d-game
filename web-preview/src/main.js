@@ -65,7 +65,10 @@ const rig = {
 };
 
 const keys = new Set();
-addEventListener('keydown', (e) => keys.add(e.code));
+addEventListener('keydown', (e) => {
+  keys.add(e.code);
+  if (e.code === 'Space') { e.preventDefault(); startJump(); }
+});
 addEventListener('keyup', (e) => keys.delete(e.code));
 
 let dragging = false;
@@ -101,8 +104,10 @@ const statsEl = document.getElementById('stats');
 
 let mixer = null;
 let model = null;
-const clips = { idle: null, walk: null, run: null };
-const actions = { idle: null, walk: null, run: null };
+const clips = { idle: null, walk: null, run: null, jump: null };
+const actions = { idle: null, walk: null, run: null, jump: null };
+const JUMP_RATE = 1.35;   // 跳跃原长 1.875 s，加快到 ~1.39 s
+let jumpT = 0;            // 剩余跳跃时间，>0 时压住行走状态机
 const WALK_SPEED = 0.66;   // 异形 walk：36.4 帧/循环 @24fps，单脚支撑位移 0.50 m → 0.66 m/s
 const RUN_SPEED = 1.19;    // 快走：同一 Walk 循环 timeScale 1.8（0.66 × 1.8），到顶不超，脚不打滑
 let curAnim = 'idle';
@@ -122,7 +127,7 @@ const glbUrl = glbParam
   ? (glbParam.startsWith('/') ? glbParam : '/' + glbParam)
   : lodParam === '1' ? '/DragonMan_Game_LOD1.glb'
   : lodParam === '2' ? '/DragonMan_Game_LOD2.glb'
-  : '/Alien_Walk_2k.glb';
+  : '/Alien_Walk_Jump_2k.glb';
 const freezeT = params.has('freeze') ? parseFloat(params.get('freeze')) : null; // __freezeT
 new GLTFLoader().load(glbUrl, (gltf) => {
   model = gltf.scene;
@@ -144,8 +149,9 @@ new GLTFLoader().load(glbUrl, (gltf) => {
   clips.idle = byName('Idle') || byName('Idle_Lively') || gltf.animations[0] || null;
   clips.walk = byName('Walk') || null;
   clips.run = byName('Run') || null;
+  clips.jump = byName('Jump') || null;
   if (clips.idle) { actions.idle = mixer.clipAction(clips.idle); actions.idle.play(); }
-  for (const k of ['walk', 'run']) {
+  for (const k of ['walk', 'run', 'jump']) {
     if (!clips[k]) continue;
     actions[k] = mixer.clipAction(clips[k]);
     actions[k].play();
@@ -156,14 +162,17 @@ new GLTFLoader().load(glbUrl, (gltf) => {
   // ?freeze=<t> 定格某一帧；?clip=run|walk|idle 指定定格哪个动作
   if (freezeT !== null) {
     const want = params.get('clip');
-    const k = want && actions[want] ? want : 'walk';
-    for (const n of ['idle', 'walk', 'run']) {
+    const k = (want && actions[want]) ? want
+      : actions.walk ? 'walk' : actions.idle ? 'idle' : actions.run ? 'run' : null;
+    if (!k) { console.warn('no clip to freeze'); }
+    for (const n of ['idle', 'walk', 'run', 'jump']) {
       if (!actions[n]) continue;
       actions[n].stop();
       actions[n].enabled = false;
       actions[n].setEffectiveWeight(0);
     }
     const a = actions[k];
+    if (a) {
     a.reset();
     a.play();
     a.paused = true;
@@ -172,6 +181,7 @@ new GLTFLoader().load(glbUrl, (gltf) => {
     a.time = Math.min(freezeT, a.getClip().duration - 0.001);
     mixer.update(0);
     window.__frozen = k;
+    }
   }
 
   document.getElementById('loading').remove();
@@ -181,6 +191,7 @@ new GLTFLoader().load(glbUrl, (gltf) => {
     lodName + ' · ' + gltf.animations.map((a) => a.name + ' ' + a.duration.toFixed(2) + 's').join(' + ') +
     (hasRun ? '' : ' · 无 Run（Shift = 快走）');
   window.__clips = { hasRun, names: gltf.animations.map((a) => a.name) };
+  if (params.has('jump')) setTimeout(startJump, 250);   // __jumpAuto
   window.__ready = true;
   console.log('clips:', gltf.animations.map((a) => a.name + ' ' + a.duration.toFixed(2) + 's').join(', '));
 }, undefined, (err) => {
@@ -195,6 +206,22 @@ new GLTFLoader().load(glbUrl, (gltf) => {
   }
   console.error(err);
 });
+
+function startJump() {
+  const a = actions.jump;
+  if (!a || jumpT > 0) return;
+  const from = actions[curAnim];
+  a.reset();
+  a.setLoop(THREE.LoopOnce, 1);
+  a.clampWhenFinished = true;
+  a.enabled = true;
+  a.setEffectiveTimeScale(JUMP_RATE);
+  a.setEffectiveWeight(1);
+  a.play();
+  if (from && from !== a) from.crossFadeTo(a, 0.10, false);
+  curAnim = 'jump';
+  jumpT = a.getClip().duration / JUMP_RATE;
+}
 
 const forward = new THREE.Vector3();
 const right = new THREE.Vector3();
@@ -226,7 +253,10 @@ function update(dt) {
   let want = !moving ? 'idle' : running ? 'run' : 'walk';
   if (!actions[want]) want = moving ? 'walk' : 'idle';
   if (!actions[want]) want = 'idle';
-  setAnim(want);
+  if (jumpT > 0) {
+    jumpT = Math.max(0, jumpT - dt);
+    if (jumpT === 0) { curAnim = 'jump'; setAnim(want); }
+  } else setAnim(want);
   if (actions.walk) actions.walk.setEffectiveTimeScale(THREE.MathUtils.clamp(speed / WALK_SPEED, 0.45, 1.8));
   if (actions.run) actions.run.setEffectiveTimeScale(THREE.MathUtils.clamp(speed / RUN_SPEED, 0.5, 1.6));
 
@@ -265,7 +295,7 @@ function update(dt) {
 
   if (model && stateEl) {
     stateEl.textContent =
-      `pos ${model.position.x.toFixed(1)}, ${model.position.z.toFixed(1)} · speed ${speed.toFixed(1)} m/s · clip ${want.toUpperCase()}`;
+      `pos ${model.position.x.toFixed(1)}, ${model.position.z.toFixed(1)} · speed ${speed.toFixed(1)} m/s · clip ${(jumpT > 0 ? 'jump' : want).toUpperCase()}`;
   }
 }
 
