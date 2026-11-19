@@ -2,6 +2,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { createWorld, stepVertical } from './world.js';
 
 const canvas = document.getElementById('c');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
@@ -49,6 +50,8 @@ const ground = new THREE.Mesh(
 );
 ground.receiveShadow = true;
 scene.add(ground);
+
+const world = createWorld(scene);
 
 const grid = new THREE.GridHelper(60, 60, 0x3d4657, 0x22262e);
 grid.material.transparent = true;
@@ -197,6 +200,12 @@ new GLTFLoader().load(glbUrl, (gltf) => {
     gltf.animations.map((a) => a.name + ' ' + a.duration.toFixed(2) + 's').join(' + ') +
     (hasRun ? '' : ' · Shift = 跑（Run 5.3 m/s）');
   window.__clips = { hasRun, names: gltf.animations.map((a) => a.name) };
+  if (params.has('pos')) {                      // __spawnAt  例：?pos=-4.4,3.0
+    const [sx, sz] = params.get('pos').split(',').map(Number);
+    model.position.set(sx, 0, sz);
+    py = world.groundAt(sx, sz, 3.0);
+    model.position.y = py;
+  }
   if (params.has('jump')) setTimeout(startJump, Number(params.get('jd')) || 250);   // __jumpAuto
   window.__ready = true;
   console.log('clips:', gltf.animations.map((a) => a.name + ' ' + a.duration.toFixed(2) + 's').join(', '));
@@ -215,7 +224,8 @@ new GLTFLoader().load(glbUrl, (gltf) => {
 
 function startJump() {
   const a = actions.jump;
-  if (!a || jumpT > 0) return;
+  if (!a || jumpT > 0 || !grounded || takeoffT >= 0) return;
+  takeoffT = 0.38;   // 蓄力段结束才起跳，和 Jump 动作的离地帧对齐
   const from = actions[curAnim];
   a.reset();
   a.setLoop(THREE.LoopOnce, 1);
@@ -238,6 +248,21 @@ const UP = new THREE.Vector3(0, 1, 0);
 const tmpQ = new THREE.Quaternion();
 let camInit = false;
 let speed = 0;
+
+// ---- 玩法状态：重力、跳跃冲量、收集进度 ----
+const PLAYER_R = 0.55;
+const GRAV = 16.3;
+const JUMP_V = 5.4;      // 顶点 0.89 m、滞空 0.66 s：够跳上 0.5 m 一级的箱子，也和 Jump 动作的落地帧对得上
+let py = 0, vy = 0, grounded = true, takeoffT = -1;
+let collected = 0, playTime = 0, finished = false;
+const gameEl = document.getElementById('game');
+function resetGame() {
+  py = 0; vy = 0; grounded = true; takeoffT = -1;
+  collected = 0; playTime = 0; finished = false;
+  if (model) { model.position.set(0, 0, 0); modelYaw = 0; }
+  for (const o of world.orbs) { o.taken = false; o.mesh.visible = true; o.ring.visible = true; }
+}
+addEventListener('keydown', (e) => { if (e.code === 'KeyR') resetGame(); });
 
 function update(dt) {
   // movement is camera relative; W pushes away from the camera
@@ -279,14 +304,38 @@ function update(dt) {
     tmpQ.multiply(tmpQ2);
     model.quaternion.slerp(tmpQ, Math.min(1, dt * 10));
     model.position.addScaledVector(moveDir, speed * dt);
-    model.position.y = 0;
+    world.resolve(model.position, PLAYER_R, py);
+
+    // 起跳冲量在蓄力结束时施加
+    if (takeoffT >= 0) {
+      takeoffT -= dt;
+      if (takeoffT < 0) { vy = JUMP_V; }
+    }
+    const gh = world.groundAt(model.position.x, model.position.z, py);
+    const st = stepVertical({ py, vy, grounded }, dt, GRAV, gh);
+    py = st.py; vy = st.vy; grounded = st.grounded;
+    model.position.y = py;
+
+    if (!finished) {
+      collected += world.tick(dt, performance.now() / 1000, { x: model.position.x, y: py, z: model.position.z });
+      playTime += dt;
+      if (collected >= world.total) { finished = true; jumpT = 0; }
+    } else {
+      world.tick(dt, performance.now() / 1000, { x: 1e9, y: 0, z: 0 });
+    }
+    if (gameEl) {
+      gameEl.textContent = finished
+        ? `通关！${playTime.toFixed(1)} s · 按 R 重开`
+        : `收集 ${collected} / ${world.total} · ${playTime.toFixed(1)} s`;
+      gameEl.classList.toggle('win', finished);
+    }
     rig.target.lerp(
       new THREE.Vector3(model.position.x, model.position.y + 1.45, model.position.z),
       Math.min(1, dt * 7)
     );
   }
 
-  const dist = rig.dist + Math.min(speed, 3) * 0.5;  // pull back while running
+  const dist = rig.dist + Math.min(speed, 5) * 0.32;  // pull back while running
   const h = Math.cos(rig.pitch) * dist;
   desiredCam.set(
     rig.target.x + Math.sin(rig.yaw) * h,
@@ -306,7 +355,7 @@ function update(dt) {
 
   if (model && stateEl) {
     stateEl.textContent =
-      `pos ${model.position.x.toFixed(1)}, ${model.position.z.toFixed(1)} · speed ${speed.toFixed(1)} m/s · lean ${(lean * 180 / Math.PI).toFixed(1)}° · clip ${(jumpT > 0 ? 'jump' : want).toUpperCase()}`;
+      `pos ${model.position.x.toFixed(1)}, ${model.position.z.toFixed(1)} · y ${py.toFixed(2)} · speed ${speed.toFixed(1)} m/s · clip ${(jumpT > 0 ? 'jump' : want).toUpperCase()}${grounded ? '' : ' · 空中'}`;
   }
 }
 

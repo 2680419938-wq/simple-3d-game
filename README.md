@@ -52,7 +52,7 @@ Reallusion Character Creator 标准人形骨架、**自带走路动作（10 个�
 | `dragon-man-final/` | **成品 GLB**：异形 `Alien_Walk_Jump_2k.glb` + 龙人 T/A-Pose、Walk、Run |
 | `异形/` | 异形原始 437 MB 素材（4K 原版，本地保留，不进仓库） |
 | `AnimLib/` | **动作导入器**：`retarget_import.py`（Mixamo → 龙人）、`mixamo_retarget.py`（Mixamo → 异形 CC 骨架，含中立帧归一化/去根位移/逐帧贴地）、`style_run.py`（前倾/低头/收肘风格化）、`ground_run.py`（逐帧抬升防穿地）、`alien_jump_build.py`（重定向 Jumping.fbx → Idle/Walk/Jump 打包）、`alien_clip_add.py`（往主 GLB 追加任意 Mixamo 动作：中立帧/world 模式、根位移、整段+逐帧贴地、前倾风格化） |
-| `web-preview/` | three.js 网页预览（零依赖 `node tools/serve.mjs`），能播动作、切模型 |
+| `web-preview/` | three.js 网页预览 + **玩法原型**（零依赖 `node tools/serve.mjs`）：动作播放、关卡碰撞、跳跃、收集，`test/` 下有 node 测试 |
 | `dragon-men-rebuild/` | 龙人生成管线脚本（Blender Python） |
 | `启动预览.cmd` | 一键起本地预览服务 |
 | `同步到gitee.cmd` | 一键提交并推送 |
@@ -61,10 +61,21 @@ Reallusion Character Creator 标准人形骨架、**自带走路动作（10 个�
 
 **看模型**：双击 `启动预览.cmd`，浏览器打开 http://127.0.0.1:5199/
 带参数（`?glb=/Alien_Walk_Jump_2k.glb` 换模型、`?lod=1|2` 切龙人 LOD、`?yaw=45&pitch=10&dist=4` 定视角、`?jump=1` 自动起跳）。
-按键：WASD 移动、Shift 跑（真 Run，5.3 m/s）、**空格跳跃**、鼠标左键拖动转视角、滚轮缩放。
+按键：WASD 移动、Shift 跑（真 Run，5.3 m/s）、**空格跳跃**、**R 重开**、鼠标左键拖动转视角、滚轮缩放。
 
 **进引擎**：把 `dragon-man-final/Alien_Walk_Jump_2k.glb` 拖进 Unity / Unreal / Godot / Blender。
 12 万三角、12 个材质、96 蒙皮骨、四个动作（Walk / Idle / Jump / Run）。龙人用 `DragonMan_Std_Walk.glb`（70 骨、5.9 万三角）。
+
+## 玩法原型（three.js，进行中）
+
+20 × 20 的场地里**收集 12 个青色球**，左上角显示进度和计时，收满后显示通关时间，按 R 重开。
+
+- **碰撞**：玩家按半径 0.55 m 的圆在 XZ 平面推挤，箱子侧面和边界墙都挡人；顶面高度单独算，所以能站上去，走出边缘会掉下来。
+- **跳跃**：`JUMP_V = 5.4`、`GRAV = 16.3` → 顶点 0.85 m、滞空 0.65 s，和 Jump 动作的离地/落地帧对齐；起跳冲量在蓄力 0.38 s 之后才给，避免「动画还在下蹲、人已经飞了」。
+- **可达性**：0 → 0.5 → 1.05 → 1.6 m 的梯级、0.45 / 0.9 / 1.35 m 三级台阶；跳一级的上限是 0.85 m，所以 12 个球全部拿得到（地面 6 个 + 台面 6 个）。
+- **代码**：`web-preview/src/world.js`（关卡、碰撞、拾取、`stepVertical` 竖直积分）、`web-preview/src/main.js`（第三人称控制、动画状态机、重力）。
+- **测试**：`cd web-preview && node test/world.mjs && node test/physics.mjs` —— 撞墙停在墙前、台面高度、拾取去重、跳跃顶点/滞空、走空掉落，11 + 5 项全通过。
+- **调试参数**：`?pos=x,z` 指定落点、`?dist=`/`?pitch=`/`?yaw=` 定视角、`?jump=1&jd=<ms>` 自动起跳。
 
 ## 角色指标（龙人，实测）
 
