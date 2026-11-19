@@ -39,7 +39,7 @@ const MAT_COLOR = {
 export function setupForestLook(scene, renderer) {
   const sunDir = new THREE.Vector3(-0.55, 0.22, -0.8).normalize();  // 低角度晨光（对应 sun_elevation 0.175）
   scene.background = null;
-  scene.fog = new THREE.FogExp2(FOG.getHex(), 0.028);
+  scene.fog = new THREE.FogExp2(FOG.getHex(), 0.025);
   const sky = skyDome(sunDir);
   scene.add(sky);
 
@@ -55,7 +55,7 @@ export function setupForestLook(scene, renderer) {
 
   const hemi = new THREE.HemisphereLight(0xbcccd8, 0x3c4234, 0.55);
   scene.add(hemi);
-  renderer.toneMappingExposure = 0.98;
+  renderer.toneMappingExposure = 0.94;
   return {
     sun, sunDir, sky,
     setSunDir(d) {

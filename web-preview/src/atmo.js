@@ -80,10 +80,10 @@ export function addAtmo(scene, sunDir) {
       new THREE.PlaneGeometry(150, 150).rotateX(-Math.PI / 2),
       new THREE.MeshBasicMaterial({
         map: fogTex[i], transparent: true, depthWrite: false, color: 0xe4ebef,
-        opacity: 0.13 + i * 0.035, toneMapped: false,
+        opacity: 0.085 + i * 0.03, toneMapped: false,
       })
     );
-    m.position.y = 0.12 + i * 0.26;
+    m.position.y = 0.18 + i * 0.34;
     m.userData = { t: 0, sp: 0.004 + i * 0.002 };
     scene.add(m);
     layers.push(m);
