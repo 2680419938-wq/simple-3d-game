@@ -104,6 +104,7 @@ const demo = params.get('demo');
 const lodParam = params.get('lod');
 if (demo === 'walk' || demo === 'run') keys.add('KeyW');
 if (demo === 'run') keys.add('ShiftLeft');
+if (demo === 'strafe') keys.add('KeyD');
 
 const stateEl = document.getElementById('state');
 if (params.has('yaw')) rig.yaw = parseFloat(params.get('yaw')); // __camParams
@@ -299,7 +300,7 @@ addEventListener('keydown', (e) => { if (e.code === 'KeyR') resetGame(); });
 function update(dt) {
   // movement is camera relative; W pushes away from the camera
   forward.set(-Math.sin(rig.yaw), 0, -Math.cos(rig.yaw)).normalize();
-  right.crossVectors(UP, forward).normalize();
+  right.crossVectors(forward, UP).normalize();   // forward x up = 屏幕右方（UP x forward 得到左方，A/D 会反）
 
   let ix = 0, iz = 0;
   if (keys.has('KeyW') || keys.has('ArrowUp')) iz += 1;
