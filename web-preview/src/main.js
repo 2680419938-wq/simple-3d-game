@@ -109,7 +109,7 @@ const actions = { idle: null, walk: null, run: null, jump: null };
 const JUMP_RATE = 1.35;   // 跳跃原长 1.875 s，加快到 ~1.39 s
 let jumpT = 0;            // 剩余跳跃时间，>0 时压住行走状态机
 const WALK_SPEED = 0.66;   // 异形 walk：36.4 帧/循环 @24fps，单脚支撑位移 0.50 m → 0.66 m/s
-const RUN_SPEED = 1.32;    // 跑：没有独立 Run 动作，用同一 Walk 循环 timeScale 2.0（0.66 × 2.0）当跑
+const RUN_SPEED = 5.30;    // 真 Run 动作（Fast Run 重定向）：支撑脚实测后退 0.22 m/帧 @24fps → 5.3 m/s
 const LEAN_MAX = 0.15;     // 跑时前倾 8.6°，让加速的 Walk 读起来像冲刺
 let curAnim = 'idle';
 let modelYaw = 0;         // 目标朝向（弧度），前倾在它之上叠加
@@ -195,7 +195,7 @@ new GLTFLoader().load(glbUrl, (gltf) => {
   document.getElementById('lodname').textContent = lodName;
   document.getElementById('cliplist').textContent =
     gltf.animations.map((a) => a.name + ' ' + a.duration.toFixed(2) + 's').join(' + ') +
-    (hasRun ? '' : ' · Shift = 跑（Walk 加速 2.0×）');
+    (hasRun ? '' : ' · Shift = 跑（Run 5.3 m/s）');
   window.__clips = { hasRun, names: gltf.animations.map((a) => a.name) };
   if (params.has('jump')) setTimeout(startJump, Number(params.get('jd')) || 250);   // __jumpAuto
   window.__ready = true;
@@ -264,7 +264,7 @@ function update(dt) {
     if (jumpT === 0) { curAnim = 'jump'; setAnim(want); }
   } else setAnim(want);
   if (actions.walk) actions.walk.setEffectiveTimeScale(THREE.MathUtils.clamp(speed / WALK_SPEED, 0.45, 2.0));
-  if (actions.run) actions.run.setEffectiveTimeScale(THREE.MathUtils.clamp(speed / RUN_SPEED, 0.5, 1.6));
+  if (actions.run) actions.run.setEffectiveTimeScale(THREE.MathUtils.clamp(speed / RUN_SPEED, 0.4, 1.25));
 
   if (model) {
     if (moving) {
