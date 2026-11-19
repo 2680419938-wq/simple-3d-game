@@ -118,7 +118,7 @@ const clips = { idle: null, walk: null, run: null, jump: null, crouch: null, cro
 const actions = { idle: null, walk: null, run: null, jump: null, crouch: null, crouchwalk: null };
 const CROUCH_SPEED = 1.3;   // 蹲走支撑脚实测 0.44m/16帧 与 0.34m/13帧 → 0.6~1.0 m/s，取 0.9
 const CROUCH_RATE = 1.5;   // Crouching.fbx 99 帧 @24fps，1.5× 下蹲约 2.7 s
-const JUMP_RATE = 1.35;   // 跳跃原长 1.875 s，加快到 ~1.39 s
+const JUMP_RATE = 1.15;   // 片段滞空 0.75 s / 物理滞空 0.663 s → 1.13~1.15，起跳与落地帧才对得上   // 跳跃原长 1.875 s，加快到 ~1.39 s
 let jumpT = 0;            // 剩余跳跃时间，>0 时压住行走状态机
 const WALK_SPEED = 0.66;   // 异形 walk：36.4 帧/循环 @24fps，单脚支撑位移 0.50 m → 0.66 m/s
 const RUN_SPEED = 5.30;    // 真 Run 动作（Fast Run 重定向）：支撑脚实测后退 0.22 m/帧 @24fps → 5.3 m/s
@@ -194,7 +194,9 @@ new GLTFLoader().load(glbUrl, (gltf) => {
   clips.idle = byName('Idle') || byName('Idle_Lively') || gltf.animations[0] || null;
   clips.walk = byName('Walk') || null;
   clips.run = byName('Run') || null;
-  clips.jump = byName('Jump') || null;
+  const jRaw = byName('Jump');
+  // 砍掉前 8 帧（0.29 s）的蓄力，起跳更快；剩 8..46 帧 = 1.58 s
+  clips.jump = jRaw ? THREE.AnimationUtils.subclip(jRaw, 'Jump', 8, 46, 24) : null;
   clips.crouch = byName('Crouch') || null;
   const cwRaw = byName('CrouchB') || byName('CrouchWalk');
   // 原片 1..43 帧几乎不动（两脚位移 < 3 cm），真正的迈步在 49..73 帧；只取这一段当循环
@@ -274,7 +276,7 @@ new GLTFLoader().load(glbUrl, (gltf) => {
 function startJump() {
   const a = actions.jump;
   if (!a || jumpT > 0 || !grounded || takeoffT >= 0 || crouched) return;
-  takeoffT = 0.38;   // 蓄力段结束才起跳，和 Jump 动作的离地帧对齐
+  takeoffT = 0.18;   // 起跳帧：片段第 0.21 s（原 F13 离地，从第 8 帧起算）÷ 1.15 倍速
   const from = actions[curAnim];
   a.reset();
   a.setLoop(THREE.LoopOnce, 1);
@@ -283,7 +285,7 @@ function startJump() {
   a.setEffectiveTimeScale(JUMP_RATE);
   a.setEffectiveWeight(1);
   a.play();
-  if (from && from !== a) from.crossFadeTo(a, 0.10, false);
+  if (from && from !== a) from.crossFadeTo(a, 0.12, false);
   curAnim = 'jump';
   jumpT = a.getClip().duration / JUMP_RATE;
 }
@@ -302,7 +304,7 @@ let speed = 0;
 const PLAYER_R = 0.55;
 const GRAV = 16.3;
 const JUMP_V = 5.4;      // 顶点 0.89 m、滞空 0.66 s：够跳上 0.5 m 一级的箱子，也和 Jump 动作的落地帧对得上
-let py = 0, vy = 0, grounded = true, takeoffT = -1;
+let py = 0, vy = 0, grounded = true, takeoffT = -1, wasGrounded = true;
 let collected = 0, playTime = 0, finished = false;
 let crouched = false;   // C 键切换：蹲下（这个动作只有下蹲过程，起身用 0.35 s 淡出回站立）
 const gameEl = document.getElementById('game');
@@ -343,6 +345,9 @@ function update(dt) {
     jumpT = Math.max(0, jumpT - dt);
     if (jumpT === 0) { curAnim = 'jump'; setAnim(want); }
   } else setAnim(want, crouched && (want === 'crouch' || want === 'crouchwalk') ? 0.12 : 0.25);
+  // 落地即刻切回跑/走，不等跳跃片段的收尾 0.4 s 播完
+  if (!wasGrounded && grounded && jumpT > 0.02) { jumpT = 0; curAnim = 'jump'; setAnim(want, 0.18); }
+  wasGrounded = grounded;
   if (actions.walk) actions.walk.setEffectiveTimeScale(THREE.MathUtils.clamp(speed / WALK_SPEED, 0.45, 2.0));
   if (actions.run) actions.run.setEffectiveTimeScale(THREE.MathUtils.clamp(speed / RUN_SPEED, 0.4, 1.25));
   if (actions.crouchwalk) actions.crouchwalk.setEffectiveTimeScale(THREE.MathUtils.clamp(speed / CROUCH_SPEED, 0.6, 1.6));
