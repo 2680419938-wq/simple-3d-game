@@ -4,6 +4,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { createWorld, stepVertical } from './world.js';
 import { setupForestLook, loadForest } from './forest.js';
+import { addAtmo } from './atmo.js';
 
 const canvas = document.getElementById('c');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
@@ -146,8 +147,10 @@ function setAnim(name, fade = 0.25) {
 const dbgEl = document.getElementById('dbg');
 const dbg = (s) => { if (dbgEl && params.has('dbg')) dbgEl.textContent += s + '\n'; };
 let forestLook = null;
+let atmo = null;
 if (useForest) {
   forestLook = setupForestLook(scene, renderer);
+  atmo = addAtmo(scene, forestLook.sunDir);
   loadForest(scene, '/Forest_Morning.glb', (res) => {
     world.addBoxes(res.boxes);
     const pts = [];
@@ -413,6 +416,7 @@ function update(dt) {
     forestLook.sun.target.updateMatrixWorld();
     forestLook.sun.shadow.camera.updateProjectionMatrix();
     forestLook.sky.position.copy(camera.position);
+    if (atmo) atmo.update(dt, model.position);
   }
   key.position.set(model ? model.position.x + 5.5 : 5.5, 9, model ? model.position.z + 4.5 : 4.5);
   ground.position.set(model ? model.position.x : 0, 0, model ? model.position.z : 0);
