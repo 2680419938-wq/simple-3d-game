@@ -6,7 +6,8 @@
 <style>
   html,body{margin:0;height:100%;background:#0d1015;overflow:hidden;font:13px/1.5 -apple-system,"Segoe UI",sans-serif;color:#dfe6f2}
   canvas{display:block}
-  #hud{position:fixed;left:16px;top:14px;pointer-events:none;text-shadow:0 1px 3px #000}
+  #hud{position:fixed;left:16px;top:14px;max-width:calc(100vw - 32px);pointer-events:none;text-shadow:0 1px 3px #000}
+  #cliplist{font-size:12px}
   #hud b{font-size:15px;letter-spacing:.5px}
   #hud .k{color:#8fa3bf}
   #stats{position:fixed;right:16px;top:14px;text-align:right;color:#8fa3bf;font-variant-numeric:tabular-nums}
@@ -17,6 +18,7 @@
 <canvas id="c"></canvas>
 <div id="hud">
   <b>简单3d游戏 · <span id="lodname">LOD0</span></b><br />
+  <span class="k" id="cliplist"></span><br />
   <span class="k">WASD 移动 · 鼠标左键拖拽转视角 · 滚轮缩放</span><br />
   <span class="k" id="state"></span>
 </div>

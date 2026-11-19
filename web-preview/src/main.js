@@ -192,8 +192,9 @@ new GLTFLoader().load(glbUrl, (gltf) => {
   document.getElementById('loading').remove();
   const lodName = { '0': 'LOD0', '1': 'LOD1', '2': 'LOD2' }[lodParam] || glbUrl.split('/').pop();
   const clip0 = clips.idle;
-  document.getElementById('lodname').textContent =
-    lodName + ' · ' + gltf.animations.map((a) => a.name + ' ' + a.duration.toFixed(2) + 's').join(' + ') +
+  document.getElementById('lodname').textContent = lodName;
+  document.getElementById('cliplist').textContent =
+    gltf.animations.map((a) => a.name + ' ' + a.duration.toFixed(2) + 's').join(' + ') +
     (hasRun ? '' : ' · Shift = 跑（Walk 加速 2.0×）');
   window.__clips = { hasRun, names: gltf.animations.map((a) => a.name) };
   if (params.has('jump')) setTimeout(startJump, Number(params.get('jd')) || 250);   // __jumpAuto
