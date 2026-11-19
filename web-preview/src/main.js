@@ -109,8 +109,13 @@ const actions = { idle: null, walk: null, run: null, jump: null };
 const JUMP_RATE = 1.35;   // 跳跃原长 1.875 s，加快到 ~1.39 s
 let jumpT = 0;            // 剩余跳跃时间，>0 时压住行走状态机
 const WALK_SPEED = 0.66;   // 异形 walk：36.4 帧/循环 @24fps，单脚支撑位移 0.50 m → 0.66 m/s
-const RUN_SPEED = 1.19;    // 快走：同一 Walk 循环 timeScale 1.8（0.66 × 1.8），到顶不超，脚不打滑
+const RUN_SPEED = 1.32;    // 跑：没有独立 Run 动作，用同一 Walk 循环 timeScale 2.0（0.66 × 2.0）当跑
+const LEAN_MAX = 0.15;     // 跑时前倾 8.6°，让加速的 Walk 读起来像冲刺
 let curAnim = 'idle';
+let modelYaw = 0;         // 目标朝向（弧度），前倾在它之上叠加
+let lean = 0;             // 当前前倾角（弧度）
+const X_AXIS = new THREE.Vector3(1, 0, 0);
+const tmpQ2 = new THREE.Quaternion();
 const clock = new THREE.Clock();
 
 function setAnim(name) {
@@ -189,7 +194,7 @@ new GLTFLoader().load(glbUrl, (gltf) => {
   const clip0 = clips.idle;
   document.getElementById('lodname').textContent =
     lodName + ' · ' + gltf.animations.map((a) => a.name + ' ' + a.duration.toFixed(2) + 's').join(' + ') +
-    (hasRun ? '' : ' · 无 Run（Shift = 快走）');
+    (hasRun ? '' : ' · Shift = 跑（Walk 加速 2.0×）');
   window.__clips = { hasRun, names: gltf.animations.map((a) => a.name) };
   if (params.has('jump')) setTimeout(startJump, 250);   // __jumpAuto
   window.__ready = true;
@@ -257,16 +262,21 @@ function update(dt) {
     jumpT = Math.max(0, jumpT - dt);
     if (jumpT === 0) { curAnim = 'jump'; setAnim(want); }
   } else setAnim(want);
-  if (actions.walk) actions.walk.setEffectiveTimeScale(THREE.MathUtils.clamp(speed / WALK_SPEED, 0.45, 1.8));
+  if (actions.walk) actions.walk.setEffectiveTimeScale(THREE.MathUtils.clamp(speed / WALK_SPEED, 0.45, 2.0));
   if (actions.run) actions.run.setEffectiveTimeScale(THREE.MathUtils.clamp(speed / RUN_SPEED, 0.5, 1.6));
 
   if (model) {
     if (moving) {
       moveDir.normalize();
-      const yaw = Math.atan2(moveDir.x, moveDir.z); // model faces +Z
-      tmpQ.setFromAxisAngle(UP, yaw);
-      model.quaternion.slerp(tmpQ, Math.min(1, dt * 10));
+      modelYaw = Math.atan2(moveDir.x, moveDir.z); // model faces +Z
     }
+    // run reads as a sprint: lean the whole body into the direction of travel
+    const leanTarget = THREE.MathUtils.clamp((speed - WALK_SPEED) / (RUN_SPEED - WALK_SPEED), 0, 1) * LEAN_MAX;
+    lean += (leanTarget - lean) * Math.min(1, dt * 6);
+    tmpQ.setFromAxisAngle(UP, modelYaw);
+    tmpQ2.setFromAxisAngle(X_AXIS, lean);
+    tmpQ.multiply(tmpQ2);
+    model.quaternion.slerp(tmpQ, Math.min(1, dt * 10));
     model.position.addScaledVector(moveDir, speed * dt);
     model.position.y = 0;
     rig.target.lerp(
@@ -295,7 +305,7 @@ function update(dt) {
 
   if (model && stateEl) {
     stateEl.textContent =
-      `pos ${model.position.x.toFixed(1)}, ${model.position.z.toFixed(1)} · speed ${speed.toFixed(1)} m/s · clip ${(jumpT > 0 ? 'jump' : want).toUpperCase()}`;
+      `pos ${model.position.x.toFixed(1)}, ${model.position.z.toFixed(1)} · speed ${speed.toFixed(1)} m/s · lean ${(lean * 180 / Math.PI).toFixed(1)}° · clip ${(jumpT > 0 ? 'jump' : want).toUpperCase()}`;
   }
 }
 
