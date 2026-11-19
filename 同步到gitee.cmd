@@ -1,7 +1,7 @@
 @echo off
 chcp 65001 >nul
 setlocal
-title Sync to Gitee
+title Sync to Gitee + GitHub
 cd /d "%~dp0"
 git add -A
 git diff --cached --quiet
@@ -18,6 +18,9 @@ if errorlevel 1 (
   echo [i] no changes to commit
 )
 git push gitee HEAD:main
-if errorlevel 1 ( echo [!] push failed & exit /b 1 )
+if errorlevel 1 ( echo [!] gitee push failed & exit /b 1 )
+git push github HEAD:main
+if errorlevel 1 ( echo [!] github push failed & exit /b 1 )
 echo [OK] https://gitee.com/lilhand/simple-3d-game
+echo [OK] https://github.com/2680419938-wq/simple-3d-game
 exit /b 0
