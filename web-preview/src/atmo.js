@@ -57,7 +57,7 @@ export function addAtmo(scene, sunDir) {
   const shafts = [];
   const mat0 = new THREE.MeshBasicMaterial({
     map: tex, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false,
-    color: 0xffe9c8, opacity: 0.22, side: THREE.DoubleSide, toneMapped: false,
+    color: 0xffe9c8, opacity: 0.30, side: THREE.DoubleSide, toneMapped: false,
   });
   for (let i = 0; i < 12; i++) {
     const g = new THREE.PlaneGeometry(1.1 + Math.random() * 1.6, 14 + Math.random() * 10);
@@ -80,10 +80,10 @@ export function addAtmo(scene, sunDir) {
       new THREE.PlaneGeometry(150, 150).rotateX(-Math.PI / 2),
       new THREE.MeshBasicMaterial({
         map: fogTex[i], transparent: true, depthWrite: false, color: 0xe4ebef,
-        opacity: 0.10 + i * 0.03, toneMapped: false,
+        opacity: 0.13 + i * 0.035, toneMapped: false,
       })
     );
-    m.position.y = 0.22 + i * 0.42;
+    m.position.y = 0.12 + i * 0.26;
     m.userData = { t: 0, sp: 0.004 + i * 0.002 };
     scene.add(m);
     layers.push(m);
