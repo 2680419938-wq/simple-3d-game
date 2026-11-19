@@ -5,6 +5,7 @@ import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { createWorld, stepVertical } from './world.js';
 import { setupForestLook, loadForest } from './forest.js';
 import { addAtmo } from './atmo.js';
+import { createGodRays } from './godrays.js';
 
 const canvas = document.getElementById('c');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
@@ -149,9 +150,13 @@ const dbg = (s) => { if (dbgEl && params.has('dbg')) dbgEl.textContent += s + '\
 let forestLook = null;
 let atmo = null;
 let sunT = 0;
+let godrays = null;
 if (useForest) {
   forestLook = setupForestLook(scene, renderer);
   atmo = addAtmo(scene, forestLook.sunDir);
+  godrays = createGodRays(renderer, scene, camera);
+  godrays.resize();
+  godrays.setEnabled(params.get('rays') === '1');   // 默认关：屏幕空间光柱仍偏灰，?rays=1 开启试用
   loadForest(scene, '/Forest_Morning.glb', (res) => {
     world.addBoxes(res.boxes);
     const pts = [];
@@ -427,6 +432,7 @@ function update(dt) {
       const d = new THREE.Vector3(Math.sin(az) * Math.cos(el), Math.sin(el), Math.cos(az) * Math.cos(el)).normalize();
       forestLook.setSunDir(d);
       if (atmo) atmo.setSunDir(d);
+      if (godrays) godrays.setSunDir(d, 120, model ? model.position : null);
     }
   }
   key.position.set(model ? model.position.x + 5.5 : 5.5, 9, model ? model.position.z + 4.5 : 4.5);
@@ -453,7 +459,8 @@ let acc = 0, frames = 0;
 function tick() {
   const dt = Math.min(clock.getDelta(), 0.05);
   update(dt);
-  renderer.render(scene, camera);
+  if (godrays) godrays.render(camera);
+  else renderer.render(scene, camera);
   frames++; acc += dt;
   if (acc > 0.5) {
     const tri = renderer.info.render.triangles;
@@ -468,4 +475,5 @@ addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
+  if (godrays) godrays.resize();
 });
