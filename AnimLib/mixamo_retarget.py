@@ -8,7 +8,7 @@ from mathutils import Matrix, Vector
 
 def args():
     a = sys.argv[sys.argv.index('--')+1:]
-    d = {'dry': False, 'fbx': [], 'inplace': False, 'lift': '0'}
+    d = {'dry': False, 'fbx': [], 'inplace': False, 'neutral': True, 'lift': '0'}
     i = 0
     while i < len(a):
         k = a[i]
@@ -16,6 +16,8 @@ def args():
             d['dry'] = True; i += 1; continue
         if k == '--inplace':
             d['inplace'] = True; i += 1; continue
+        if k == '--no-neutral':
+            d['neutral'] = False; i += 1; continue
         v = a[i+1] if i+1 < len(a) else ''
         if k == '--fbx':
             d['fbx'].append(v)
@@ -67,6 +69,10 @@ def bone_depth(b):
     return d
 
 A_LIFT = ['0']
+# 中立帧归一化：源绑定（Mixamo T-pose）与目标绑定（异形 A-pose）不同，直接搬世界旋转会把
+# 「T->A 放下手臂」这段静态差当成动画逐帧施加（实测上臂恒定偏 68°，两手在身后交叉）。
+# 以源动作第一帧为中立帧，把它的偏差除掉，只保留相对中立帧的运动。
+A_NEUTRAL = [True]
 
 def retarget(cc_rig, mix_rig, pairs, action, name, hip_pairs, inplace=False):
     sc = bpy.context.scene
@@ -88,6 +94,17 @@ def retarget(cc_rig, mix_rig, pairs, action, name, hip_pairs, inplace=False):
     hip_names = {c.name for c, m in hip_pairs}
     allb = sorted(cc_rig.data.bones, key=bone_depth)
     I4 = Matrix.Identity(4)
+    DN, TWN = {}, {}
+    if A_NEUTRAL[0]:
+        sc.frame_set(f0)
+        for cb in allb:
+            mb = pair_by_cc.get(cb.name)
+            if mb is None: continue
+            P_m0 = mw_m @ mix_rig.pose.bones[mb.name].matrix
+            base = mw_m @ mb.matrix_local
+            DN[mb.name] = (P_m0 @ base.inverted()).inverted()
+            TWN[mb.name] = P_m0.translation - base.translation
+        print('NEUTRAL f0=%d bones=%d' % (f0, len(DN)))
     for f in range(f0, f1 + 1):
         sc.frame_set(f)
         P = {}
@@ -101,9 +118,12 @@ def retarget(cc_rig, mix_rig, pairs, action, name, hip_pairs, inplace=False):
             else:
                 P_m = mw_m @ mix_rig.pose.bones[mb.name].matrix
                 D = P_m @ (mw_m @ mb.matrix_local).inverted()
+                if mb.name in DN:  # 只保留相对中立帧的运动
+                    D = D @ DN[mb.name]
                 target = (mw_ci @ D @ mw_c) @ R_c
                 if cb.name in hip_names:
                     t_w = P_m.translation - (mw_m @ mb.matrix_local).translation
+                    if mb.name in TWN: t_w = t_w - TWN[mb.name]
                     if inplace:  # 取消根位移（前进方向 = -Y），只保留垂直起伏
                         t_w.y = 0.0
                     t_w.z += float(A_LIFT[0])
@@ -186,6 +206,7 @@ def main():
             print('  %-28s <- %s' % (cb.name, mb.name))
         return
     A_LIFT[0] = A.get('lift', '0')
+    A_NEUTRAL[0] = A['neutral']
     hip_pairs = [(cb, mb) for cb, mb in pairs if cb.name == 'CC_Base_Hip_02']
     for rig, actlist, nm in acts:
         for a in actlist:

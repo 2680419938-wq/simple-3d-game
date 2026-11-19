@@ -196,7 +196,7 @@ new GLTFLoader().load(glbUrl, (gltf) => {
     lodName + ' · ' + gltf.animations.map((a) => a.name + ' ' + a.duration.toFixed(2) + 's').join(' + ') +
     (hasRun ? '' : ' · Shift = 跑（Walk 加速 2.0×）');
   window.__clips = { hasRun, names: gltf.animations.map((a) => a.name) };
-  if (params.has('jump')) setTimeout(startJump, 250);   // __jumpAuto
+  if (params.has('jump')) setTimeout(startJump, Number(params.get('jd')) || 250);   // __jumpAuto
   window.__ready = true;
   console.log('clips:', gltf.animations.map((a) => a.name + ' ' + a.duration.toFixed(2) + 's').join(', '));
 }, undefined, (err) => {

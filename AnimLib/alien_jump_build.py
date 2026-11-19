@@ -63,6 +63,20 @@ cc.animation_data.action=jp
 for pb in cc.pose.bones: pb.rotation_mode='QUATERNION'; pb.matrix_basis=Matrix.Identity(4)
 f0,f1=int(jact.frame_range[0]), int(jact.frame_range[1])
 allb=sorted(cc.data.bones, key=depth)
+# ---- neutral normalisation -------------------------------------------------
+# Mixamo 的绑定姿势是 T-pose，动画自身把手臂放下来约 68 度；而异形绑定就是 A-pose。
+# 直接用「相对绑定的世界旋转」会把这段放下量再叠一次 -> 两手在身后交叉。
+# 这里以源动作第一帧为中立帧，只搬运「相对中立帧」的旋转/位移。
+DN={}; TWN=None
+sc.frame_set(f0)
+for cb in allb:
+    mb=pair_by.get(cb.name)
+    if mb is None: continue
+    P_m=MWM@mix.pose.bones[mb.name].matrix
+    DN[cb.name]=(P_m@(MWM@mb.matrix_local).inverted()).inverted()
+    if cb.name=='CC_Base_Hip_02':
+        TWN=P_m.translation-(MWM@mb.matrix_local).translation
+print('NEUTRAL F%d, mapped %d bones' % (f0, len(DN)))
 for f in range(f0,f1+1):
     sc.frame_set(f)
     P={}
@@ -73,10 +87,11 @@ for f in range(f0,f1+1):
         if mb is None:
             P[cb.name]=ref; continue
         P_m=MWM@mix.pose.bones[mb.name].matrix
-        D=P_m@(MWM@mb.matrix_local).inverted()
+        D=(P_m@(MWM@mb.matrix_local).inverted())@DN[cb.name]
         target=(MWCI@D@MWC)@R_c
         if cb.name=='CC_Base_Hip_02':
             t_w=P_m.translation-(MWM@mb.matrix_local).translation
+            if TWN is not None: t_w=t_w-TWN
             target.translation=R_c.translation+(MWCI.to_3x3()@t_w)*ratio
         B=ref.inverted()@target; P[cb.name]=target
         loc,rot,_=B.decompose(); pc=cc.pose.bones[cb.name]; pc.rotation_quaternion=rot

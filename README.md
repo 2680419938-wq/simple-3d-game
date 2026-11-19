@@ -3,7 +3,7 @@
 一个可以直接进引擎的 3D 角色资产工程 + three.js 网页预览。
 
 **当前主角**：异形（Alien）——12 万三角、189 根骨（96 根驱动骨 + 93 根 scaleCompensation 辅助骨）、
-Reallusion Character Creator 标准人形骨架、**自带走路动作（10 个循环）+ 脚本生成的待机 + Mixamo 重定向的跳跃**，2K 贴图版 24.1 MB。
+Reallusion Character Creator 标准人形骨架、**自带走路动作（10 个循环）+ 脚本生成的待机 + Mixamo 重定向的跳跃**，2K 贴图版 25.1 MB。
 
 **历史资产**：Q 版龙人武士（DragonMan）——标准 Mixamo 命名骨架、T/A-Pose 双版、Idle / Run / Walk、
 全身关节过渡几何、Mixamo 动作导入器。保留在 `dragon-man-final/` 与 `dragon-men-rebuild/` 不动。
@@ -12,7 +12,7 @@ Reallusion Character Creator 标准人形骨架、**自带走路动作（10 个�
 
 | 指标 | 数值 |
 | --- | --- |
-| 文件 | `dragon-man-final/Alien_Walk_Jump_2k.glb`（24.1 MB） |
+| 文件 | `dragon-man-final/Alien_Walk_Jump_2k.glb`（25.1 MB） |
 | 原始素材 | `异形/character_alien_3d_model_by_oscar_creativo.glb`（437 MB，4K 贴图，仅本地保留，不进仓库） |
 | 三角数 / 网格 | 120,818 三角 / 12 个 skinned mesh |
 | 材质 / 贴图 | 12 个 PBR 材质，每个 BaseColor + ORM + Normal；导出时 4096 → 2048 WebP(q80) |
@@ -35,8 +35,14 @@ Reallusion Character Creator 标准人形骨架、**自带走路动作（10 个�
 + 逐帧贴地 + 前倾/低头/收肘风格化，参数见脚本头注释。）
 
 **关于跳跃**：`AnimLib/alien_jump_build.py` 把 Mixamo 的 Jumping 动作重定向到 CC_Base 骨架，
-逐帧把最低顶点抬到 ≥0.002 m（起跳/落地各约 5 cm 抬升），导出时保留 Idle / Walk / Jump 三条 action，
+逐帧把最低顶点抬到 ≥0.002 m（蓄力下蹲时最多抬 0.23 m，落地帧最低点 0.002 m），导出时保留 Idle / Walk / Jump 三条 action，
 并清掉了导入时 Mixamo 的临时骨架与模型里的一颗无用 Icosphere。预览里按 **空格** 触发一次（timeScale 1.35）。
+
+**为什么落地时手臂会交叉（已修）**：Mixamo 的绑定姿势是 **T-pose**（手臂水平），异形的绑定姿势是 **A-pose**（手臂下垂 68°），
+而重定向公式 `D = P_m · (MWM · matrix_local)⁻¹` 会把「T→A 的放下量」当成动画内容逐帧施加一遍——
+实测上臂恒偏 67.9°、前臂 68.9°，两只手因此甩到身后交叉。修法是**中立帧归一化**：
+以源动作第一帧为中立帧，预先算 `DN = (P_m · base⁻¹)⁻¹`，烘焙时用 `D · DN` 只保留相对中立帧的运动。
+这条已默认启用（`--no-neutral` 可关），所以任何 T-pose 源动作搬到 A-pose 目标上都不会再出现这种固定偏转。
 
 ## 目录
 
@@ -44,7 +50,7 @@ Reallusion Character Creator 标准人形骨架、**自带走路动作（10 个�
 | --- | --- |
 | `dragon-man-final/` | **成品 GLB**：异形 `Alien_Walk_Jump_2k.glb` + 龙人 T/A-Pose、Walk、Run |
 | `异形/` | 异形原始 437 MB 素材（4K 原版，本地保留，不进仓库） |
-| `AnimLib/` | **动作导入器**：`retarget_import.py`（Mixamo → 龙人）、`mixamo_retarget.py`（Mixamo → 异形 CC 骨架，含去根位移/逐帧贴地）、`style_run.py`（前倾/低头/收肘风格化）、`ground_run.py`（逐帧抬升防穿地）、`alien_jump_build.py`（重定向 Jumping.fbx → Idle/Walk/Jump 打包） |
+| `AnimLib/` | **动作导入器**：`retarget_import.py`（Mixamo → 龙人）、`mixamo_retarget.py`（Mixamo → 异形 CC 骨架，含中立帧归一化/去根位移/逐帧贴地）、`style_run.py`（前倾/低头/收肘风格化）、`ground_run.py`（逐帧抬升防穿地）、`alien_jump_build.py`（重定向 Jumping.fbx → Idle/Walk/Jump 打包） |
 | `web-preview/` | three.js 网页预览（零依赖 `node tools/serve.mjs`），能播动作、切模型 |
 | `dragon-men-rebuild/` | 龙人生成管线脚本（Blender Python） |
 | `启动预览.cmd` | 一键起本地预览服务 |
