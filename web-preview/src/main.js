@@ -104,7 +104,7 @@ let model = null;
 const clips = { idle: null, walk: null, run: null };
 const actions = { idle: null, walk: null, run: null };
 const WALK_SPEED = 0.66;   // 异形 walk：36.4 帧/循环 @24fps，单脚支撑位移 0.50 m → 0.66 m/s
-const RUN_SPEED = 1.35;    // 无 Run 动作，Shift 走快一点（同一 walk 循环加时间缩放）
+const RUN_SPEED = 1.19;    // 快走：同一 Walk 循环 timeScale 1.8（0.66 × 1.8），到顶不超，脚不打滑
 let curAnim = 'idle';
 const clock = new THREE.Clock();
 
@@ -153,14 +153,25 @@ new GLTFLoader().load(glbUrl, (gltf) => {
     actions[k].setEffectiveWeight(0);
   }
   const hasRun = !!actions.run;
-  if (freezeT !== null && clips.walk) {
-    actions.idle.stop();
-    actions.walk.enabled = true;
-    actions.walk.setEffectiveWeight(1);
-    actions.walk.paused = true;
-    actions.walk.time = freezeT;
+  // ?freeze=<t> 定格某一帧；?clip=run|walk|idle 指定定格哪个动作
+  if (freezeT !== null) {
+    const want = params.get('clip');
+    const k = want && actions[want] ? want : 'walk';
+    for (const n of ['idle', 'walk', 'run']) {
+      if (!actions[n]) continue;
+      actions[n].stop();
+      actions[n].enabled = false;
+      actions[n].setEffectiveWeight(0);
+    }
+    const a = actions[k];
+    a.reset();
+    a.play();
+    a.paused = true;
+    a.enabled = true;
+    a.setEffectiveWeight(1);
+    a.time = Math.min(freezeT, a.getClip().duration - 0.001);
     mixer.update(0);
-    window.__frozen = true;
+    window.__frozen = k;
   }
 
   document.getElementById('loading').remove();

@@ -19,16 +19,17 @@ Reallusion Character Creator 标准人形骨架、**自带走路动作（10 个�
 | 骨骼 | 189 根（`CC_Base_*` 命名 + `_scaleCompensation` 辅助骨），96 根参与蒙皮 |
 | 动作 A | `Walk` 15.17 s = **10 个完整走路循环**（36.44 帧/循环 @24 fps，原地循环、无根位移） |
 | 动作 B | `Idle` 3.00 s，脚本生成（脊柱呼吸 + 头部微摆 + 髋部 6 mm 起伏），腿部保持站立 |
-| 步速 | 单脚支撑位移 0.50 m / 17–19 帧 → **0.66 m/s**；预览里 `WALK_SPEED` 与它对齐，脚不打滑 |
+| 步速 | 单脚支撑位移 0.50 m / 17–19 帧 → **0.66 m/s**；按住 Shift 快走 → **1.19 m/s**（timeScale 1.8）；预览里 `WALK_SPEED` 与它对齐，脚不打滑 |
 | 朝向 / 单位 | 面向 +Z，Y-up，1 单位 = 1 米，脚底 y≈0（逐帧最低点 0.005 m） |
 
 **关于那个动画**：素材自带的 15 秒动画原名 `6521517516544_TempMotion`，看着像待机，实测是走路——
 双脚交替支撑、髋部起伏 3.7 cm、脚踝抬升 16 cm、髋部前后位移为 0（原地循环），10 个循环首尾相接。
 所以直接当走路用，另用脚本生成了一个真正的待机（`异形/build_walk_idle.py`）。
 
-**已知限制**：没有跑步动作。按住 Shift 是同一个 Walk 循环加速播放（`RUN_SPEED = 1.35`），
-不是独立的 Run 姿态。要补真 Run，用 `AnimLib/` 的导入器重定向 Mixamo 的跑步 FBX 即可
-（异形是 CC 骨架，需要一张 `CC_Base_*` ↔ `mixamorig:*` 的对应表）。
+**关于「跑步」**：模型只有 Walk / Idle 两个动作，没有独立的 Run 姿态。按住 Shift 是把同一个
+Walk 循环加速到 1.8 倍播放（`RUN_SPEED = 1.19` m/s），当作快走/小跑用，脚不打滑。
+要补真 Run，用 `AnimLib/mixamo_retarget.py` 重定向 Mixamo 跑步 FBX（已跑通：去掉根位移 + 逐帧贴地
++ 可加前倾/低头/收肘的风格化，参数见脚本头注释）。
 
 ## 目录
 
@@ -36,7 +37,7 @@ Reallusion Character Creator 标准人形骨架、**自带走路动作（10 个�
 | --- | --- |
 | `dragon-man-final/` | **成品 GLB**：异形 `Alien_Walk_2k.glb` + 龙人 T/A-Pose、Walk、Run |
 | `异形/` | 异形原始 437 MB 素材（4K 原版，本地保留，不进仓库） |
-| `AnimLib/` | **动作导入器**：把 Mixamo 等标准命名人形 FBX/BVH 重定向到龙人 |
+| `AnimLib/` | **动作导入器**：`retarget_import.py`（Mixamo → 龙人）、`mixamo_retarget.py`（Mixamo → 异形 CC 骨架，含去根位移/逐帧贴地）、`style_run.py`（前倾/低头/收肘风格化）、`ground_run.py`（逐帧抬升防穿地） |
 | `web-preview/` | three.js 网页预览（零依赖 `node tools/serve.mjs`），能播动作、切模型 |
 | `dragon-men-rebuild/` | 龙人生成管线脚本（Blender Python） |
 | `启动预览.cmd` | 一键起本地预览服务 |
