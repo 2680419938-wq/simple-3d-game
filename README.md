@@ -22,6 +22,7 @@ Reallusion Character Creator 标准人形骨架、**自带走路动作（10 个�
 | 动作 C | `Jump` 1.92 s（46 帧 @24 fps，Mixamo `Jumping.fbx` 重定向）——起跳蓄力 → 腾空收腿（髋部升 0.56 m）→ 落地缓冲，原地无根位移，逐帧贴地（最低点 0.002 m） |
 | 动作 D | `Run` 0.542 s（13 帧 @24 fps，Mixamo `Fast Run.fbx` 重定向）——真冲刺循环：重心前压、膝抬高、双脚交替支撑，原地无根位移 |
 | 动作 E | `Crouch` 4.13 s（99 帧 @24 fps，Mixamo `Crouching.fbx` 重定向）——从站姿下蹲到低伏（髋部 1.07→0.53 m），片尾停住不循环；起身用 0.35 s 交叉淡出回 Idle |
+| 动作 F | `CrouchWalk` 3.04 s（73 帧 @24 fps，Mixamo `Crouch Walk.fbx` 重定向）——蹲走；预览里只取前 49 帧（2.0 s）循环，因为原片尾髋部从 0.61 m 升到 0.88 m（像在起身），直接循环会每圈“站起来”一次。支撑脚实测 0.44 m/16 帧 与 0.34 m/13 帧 → 蹲走速度取 0.9 m/s |
 | 步速 | 走：单脚支撑位移 0.50 m / 17–19 帧 → **0.66 m/s**；跑：支撑脚后退 0.22 m/帧 @24fps → **5.3 m/s**。预览里 `WALK_SPEED` / `RUN_SPEED` 与实测对齐，播放速率按真实速度反算，脚不打滑 |
 | 朝向 / 单位 | 面向 +Z，Y-up，1 单位 = 1 米，脚底 y≈0（逐帧最低点 0.005 m） |
 
@@ -63,10 +64,10 @@ Reallusion Character Creator 标准人形骨架、**自带走路动作（10 个�
 **看模型**：双击 `启动预览.cmd`，浏览器打开 http://127.0.0.1:5199/
 带参数（`?glb=/Alien_Walk_Jump_2k.glb` 换模型、`?lod=1|2` 切龙人 LOD、`?yaw=45&pitch=10&dist=4` 定视角、`?jump=1` 自动起跳）。
 按键：WASD 移动、Shift 跑（真 Run，5.3 m/s）、**空格跳跃**、**C 蹲下/起身**、**R 重开**、鼠标左键拖动转视角、滚轮缩放。
-蹲下时移动被锁死（Mixamo 只给了下蹲过程、没给蹲走），要蹲着走需要再补一个 `Crouching Walk`。
+蹲下后仍可移动（`CrouchWalk`，0.9 m/s），按一下 C 又站起来；蹲下时不能跳。
 
 **进引擎**：把 `dragon-man-final/Alien_Walk_Jump_2k.glb` 拖进 Unity / Unreal / Godot / Blender。
-12 万三角、12 个材质、96 蒙皮骨、五个动作（Walk / Idle / Jump / Run / Crouch）。龙人用 `DragonMan_Std_Walk.glb`（70 骨、5.9 万三角）。
+12 万三角、12 个材质、96 蒙皮骨、六个动作（Walk / Idle / Jump / Run / Crouch / CrouchWalk）。龙人用 `DragonMan_Std_Walk.glb`（70 骨、5.9 万三角）。
 
 ## 场景：晨雾森林（默认）
 
