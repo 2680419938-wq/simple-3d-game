@@ -114,8 +114,9 @@ const statsEl = document.getElementById('stats');
 
 let mixer = null;
 let model = null;
-const clips = { idle: null, walk: null, run: null, jump: null };
-const actions = { idle: null, walk: null, run: null, jump: null };
+const clips = { idle: null, walk: null, run: null, jump: null, crouch: null };
+const actions = { idle: null, walk: null, run: null, jump: null, crouch: null };
+const CROUCH_RATE = 1.5;   // Crouching.fbx 99 帧 @24fps，1.5× 下蹲约 2.7 s
 const JUMP_RATE = 1.35;   // 跳跃原长 1.875 s，加快到 ~1.39 s
 let jumpT = 0;            // 剩余跳跃时间，>0 时压住行走状态机
 const WALK_SPEED = 0.66;   // 异形 walk：36.4 帧/循环 @24fps，单脚支撑位移 0.50 m → 0.66 m/s
@@ -131,8 +132,9 @@ const clock = new THREE.Clock();
 function setAnim(name) {
   if (name === curAnim || !actions[name]) return;
   const from = actions[curAnim], to = actions[name];
-  to.enabled = true; to.setEffectiveTimeScale(1); to.setEffectiveWeight(1);
-  to.time = 0; to.play();
+  to.reset();   // reset() 会清掉 paused（LoopOnce+clampWhenFinished 播完会置 paused，不清就永远停在最后一帧）
+  to.setEffectiveTimeScale(1); to.setEffectiveWeight(1);
+  to.play();
   if (from) from.crossFadeTo(to, 0.25, false);
   curAnim = name;
 }
@@ -189,13 +191,18 @@ new GLTFLoader().load(glbUrl, (gltf) => {
   clips.walk = byName('Walk') || null;
   clips.run = byName('Run') || null;
   clips.jump = byName('Jump') || null;
+  clips.crouch = byName('Crouch') || null;
   if (clips.idle) { actions.idle = mixer.clipAction(clips.idle); actions.idle.play(); }
-  for (const k of ['walk', 'run', 'jump']) {
+  for (const k of ['walk', 'run', 'jump', 'crouch']) {
     if (!clips[k]) continue;
     actions[k] = mixer.clipAction(clips[k]);
     actions[k].play();
     actions[k].enabled = false;
     actions[k].setEffectiveWeight(0);
+  }
+  if (actions.crouch) {
+    actions.crouch.setLoop(THREE.LoopOnce, 1);
+    actions.crouch.clampWhenFinished = true;     // 蹲到底保持姿势，起身靠交叉淡出
   }
   const hasRun = !!actions.run;
   // ?freeze=<t> 定格某一帧；?clip=run|walk|idle 指定定格哪个动作
@@ -239,6 +246,7 @@ new GLTFLoader().load(glbUrl, (gltf) => {
     py = world.groundAt(sx, sz, 3.0);
     model.position.y = py;
   }
+  if (params.has('crouch')) setTimeout(() => { crouched = true; }, Number(params.get('cd')) || 300);   // __crouchAuto
   if (params.has('jump')) setTimeout(startJump, Number(params.get('jd')) || 250);   // __jumpAuto
   window.__ready = true;
   console.log('clips:', gltf.animations.map((a) => a.name + ' ' + a.duration.toFixed(2) + 's').join(', '));
@@ -257,7 +265,7 @@ new GLTFLoader().load(glbUrl, (gltf) => {
 
 function startJump() {
   const a = actions.jump;
-  if (!a || jumpT > 0 || !grounded || takeoffT >= 0) return;
+  if (!a || jumpT > 0 || !grounded || takeoffT >= 0 || crouched) return;
   takeoffT = 0.38;   // 蓄力段结束才起跳，和 Jump 动作的离地帧对齐
   const from = actions[curAnim];
   a.reset();
@@ -288,6 +296,7 @@ const GRAV = 16.3;
 const JUMP_V = 5.4;      // 顶点 0.89 m、滞空 0.66 s：够跳上 0.5 m 一级的箱子，也和 Jump 动作的落地帧对得上
 let py = 0, vy = 0, grounded = true, takeoffT = -1;
 let collected = 0, playTime = 0, finished = false;
+let crouched = false;   // C 键切换：蹲下（这个动作只有下蹲过程，起身用 0.35 s 淡出回站立）
 const gameEl = document.getElementById('game');
 function resetGame() {
   py = 0; vy = 0; grounded = true; takeoffT = -1;
@@ -295,7 +304,10 @@ function resetGame() {
   if (model) { model.position.set(0, 0, 0); modelYaw = 0; }
   for (const o of world.orbs) { o.taken = false; o.mesh.visible = true; o.ring.visible = true; }
 }
-addEventListener('keydown', (e) => { if (e.code === 'KeyR') resetGame(); });
+addEventListener('keydown', (e) => {
+  if (e.code === 'KeyR') resetGame();
+  if (e.code === 'KeyC' && actions.crouch && grounded) crouched = !crouched;
+});
 
 function update(dt) {
   // movement is camera relative; W pushes away from the camera
@@ -309,12 +321,12 @@ function update(dt) {
   if (keys.has('KeyA') || keys.has('ArrowLeft')) ix -= 1;
 
   moveDir.set(0, 0, 0).addScaledVector(forward, iz).addScaledVector(right, ix);
-  const moving = moveDir.lengthSq() > 0 && !!model;
+  const moving = moveDir.lengthSq() > 0 && !!model && !crouched;   // 蹲下时锁住移动（缺 Crouch Walk）
   const running = keys.has('ShiftLeft') || keys.has('ShiftRight');
   const targetSpeed = moving ? (running ? RUN_SPEED : WALK_SPEED) : 0;
   speed += (targetSpeed - speed) * Math.min(1, dt * 9);
   // pick the clip for the current state; playback rate tracks real speed so feet stop sliding
-  let want = !moving ? 'idle' : running ? 'run' : 'walk';
+  let want = crouched ? 'crouch' : !moving ? 'idle' : running ? 'run' : 'walk';
   if (!actions[want]) want = moving ? 'walk' : 'idle';
   if (!actions[want]) want = 'idle';
   if (jumpT > 0) {
@@ -363,7 +375,7 @@ function update(dt) {
       gameEl.classList.toggle('win', finished);
     }
     rig.target.lerp(
-      new THREE.Vector3(model.position.x, model.position.y + 1.45, model.position.z),
+      new THREE.Vector3(model.position.x, model.position.y + (crouched ? 1.05 : 1.45), model.position.z),
       Math.min(1, dt * 7)
     );
   }
