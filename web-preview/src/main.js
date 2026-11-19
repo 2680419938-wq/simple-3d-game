@@ -116,7 +116,7 @@ let mixer = null;
 let model = null;
 const clips = { idle: null, walk: null, run: null, jump: null, crouch: null, crouchwalk: null };
 const actions = { idle: null, walk: null, run: null, jump: null, crouch: null, crouchwalk: null };
-const CROUCH_SPEED = 0.8;   // 蹲走支撑脚实测 0.44m/16帧 与 0.34m/13帧 → 0.6~1.0 m/s，取 0.9
+const CROUCH_SPEED = 1.3;   // 蹲走支撑脚实测 0.44m/16帧 与 0.34m/13帧 → 0.6~1.0 m/s，取 0.9
 const CROUCH_RATE = 1.5;   // Crouching.fbx 99 帧 @24fps，1.5× 下蹲约 2.7 s
 const JUMP_RATE = 1.35;   // 跳跃原长 1.875 s，加快到 ~1.39 s
 let jumpT = 0;            // 剩余跳跃时间，>0 时压住行走状态机
@@ -196,9 +196,10 @@ new GLTFLoader().load(glbUrl, (gltf) => {
   clips.run = byName('Run') || null;
   clips.jump = byName('Jump') || null;
   clips.crouch = byName('Crouch') || null;
-  const cwRaw = byName('CrouchWalk');
+  const cwRaw = byName('CrouchB') || byName('CrouchWalk');
   // 原片 1..43 帧几乎不动（两脚位移 < 3 cm），真正的迈步在 49..73 帧；只取这一段当循环
-  clips.crouchwalk = cwRaw ? THREE.AnimationUtils.subclip(cwRaw, 'CrouchWalk', 49, 73, 24) : null;
+  clips.crouchwalk = cwRaw || null;   // Crouched Walking：26 帧 1.04 s，首末帧完全一致（seam 0.001）可直循环
+  clips.crouch = cwRaw ? THREE.AnimationUtils.subclip(cwRaw, 'CrouchIdle', 1, 2, 24) : clips.crouch;   // 蹲待机 = 同一动作的第 1 帧姿态（双脚并拢）
   if (clips.idle) { actions.idle = mixer.clipAction(clips.idle); actions.idle.play(); }
   for (const k of ['walk', 'run', 'jump', 'crouch', 'crouchwalk']) {
     if (!clips[k]) continue;
