@@ -116,7 +116,7 @@ let mixer = null;
 let model = null;
 const clips = { idle: null, walk: null, run: null, jump: null, crouch: null, crouchwalk: null };
 const actions = { idle: null, walk: null, run: null, jump: null, crouch: null, crouchwalk: null };
-const CROUCH_SPEED = 0.9;   // 蹲走支撑脚实测 0.44m/16帧 与 0.34m/13帧 → 0.6~1.0 m/s，取 0.9
+const CROUCH_SPEED = 0.8;   // 蹲走支撑脚实测 0.44m/16帧 与 0.34m/13帧 → 0.6~1.0 m/s，取 0.9
 const CROUCH_RATE = 1.5;   // Crouching.fbx 99 帧 @24fps，1.5× 下蹲约 2.7 s
 const JUMP_RATE = 1.35;   // 跳跃原长 1.875 s，加快到 ~1.39 s
 let jumpT = 0;            // 剩余跳跃时间，>0 时压住行走状态机
@@ -130,13 +130,13 @@ const X_AXIS = new THREE.Vector3(1, 0, 0);
 const tmpQ2 = new THREE.Quaternion();
 const clock = new THREE.Clock();
 
-function setAnim(name) {
+function setAnim(name, fade = 0.25) {
   if (name === curAnim || !actions[name]) return;
   const from = actions[curAnim], to = actions[name];
   to.reset();   // reset() 会清掉 paused（LoopOnce+clampWhenFinished 播完会置 paused，不清就永远停在最后一帧）
   to.setEffectiveTimeScale(1); to.setEffectiveWeight(1);
   to.play();
-  if (from) from.crossFadeTo(to, 0.25, false);
+  if (from) from.crossFadeTo(to, fade, false);
   curAnim = name;
 }
 
@@ -194,7 +194,8 @@ new GLTFLoader().load(glbUrl, (gltf) => {
   clips.jump = byName('Jump') || null;
   clips.crouch = byName('Crouch') || null;
   const cwRaw = byName('CrouchWalk');
-  clips.crouchwalk = cwRaw ? THREE.AnimationUtils.subclip(cwRaw, 'CrouchWalk', 1, 49, 24) : null;   // 只取前 2 s：原片尾髋部会升到 0.88 m（像在起身），不适合循环
+  // 原片 1..43 帧几乎不动（两脚位移 < 3 cm），真正的迈步在 49..73 帧；只取这一段当循环
+  clips.crouchwalk = cwRaw ? THREE.AnimationUtils.subclip(cwRaw, 'CrouchWalk', 49, 73, 24) : null;
   if (clips.idle) { actions.idle = mixer.clipAction(clips.idle); actions.idle.play(); }
   for (const k of ['walk', 'run', 'jump', 'crouch', 'crouchwalk']) {
     if (!clips[k]) continue;
@@ -337,7 +338,7 @@ function update(dt) {
   if (jumpT > 0) {
     jumpT = Math.max(0, jumpT - dt);
     if (jumpT === 0) { curAnim = 'jump'; setAnim(want); }
-  } else setAnim(want);
+  } else setAnim(want, crouched && (want === 'crouch' || want === 'crouchwalk') ? 0.12 : 0.25);
   if (actions.walk) actions.walk.setEffectiveTimeScale(THREE.MathUtils.clamp(speed / WALK_SPEED, 0.45, 2.0));
   if (actions.run) actions.run.setEffectiveTimeScale(THREE.MathUtils.clamp(speed / RUN_SPEED, 0.4, 1.25));
   if (actions.crouchwalk) actions.crouchwalk.setEffectiveTimeScale(THREE.MathUtils.clamp(speed / CROUCH_SPEED, 0.6, 1.6));
@@ -409,6 +410,13 @@ function update(dt) {
   grid.position.x = ground.position.x;
   grid.position.z = ground.position.z;
 
+  if (params.has('dbg') && dbgEl) {
+    const f = (n) => {
+      const a = actions[n];
+      return a ? n + ':t' + a.time.toFixed(2) + '/w' + a.getEffectiveWeight().toFixed(2) + (a.paused ? '/P' : '') : n + ':--';
+    };
+    dbgEl.textContent = [f('crouch'), f('crouchwalk'), f('walk'), 'cur=' + curAnim, 'crouched=' + crouched].join('  ');
+  }
   if (mixer && !window.__frozen) mixer.update(dt);
 
   if (model && stateEl) {
