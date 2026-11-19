@@ -133,8 +133,11 @@ const clock = new THREE.Clock();
 function setAnim(name, fade = 0.25) {
   if (name === curAnim || !actions[name]) return;
   const from = actions[curAnim], to = actions[name];
+  const fromCrouchWalk = curAnim === 'crouchwalk';
   to.reset();   // reset() 会清掉 paused（LoopOnce+clampWhenFinished 播完会置 paused，不清就永远停在最后一帧）
   to.setEffectiveTimeScale(1); to.setEffectiveWeight(1);
+  // 从蹲走回到蹲待机时，直接跳到 Crouch 的末帧（蹲姿），否则会把「从站姿蹲下」整段重播一遍，看起来像站起来
+  if (name === 'crouch' && fromCrouchWalk) to.time = Math.max(0, to.getClip().duration - 0.05);
   to.play();
   if (from) from.crossFadeTo(to, fade, false);
   curAnim = name;
