@@ -265,14 +265,14 @@ new GLTFLoader().load(glbUrl, (gltf) => {
   }
 
   document.getElementById('loading').remove();
-  const lodName = useForest
-    ? 'Forest_Morning + ' + glbUrl.split('/').pop()
-    : { '0': 'LOD0', '1': 'LOD1', '2': 'LOD2' }[lodParam] || glbUrl.split('/').pop();
+  const modelName = glbUrl.split('/').pop();
+  const lodName = useForest ? modelName : { '0': 'LOD0', '1': 'LOD1', '2': 'LOD2' }[lodParam] || modelName;
   const clip0 = clips.idle;
   document.getElementById('lodname').textContent = lodName;
   document.getElementById('cliplist').textContent =
+    (useForest ? 'Forest_Morning · ' : '') +
     gltf.animations.map((a) => a.name + ' ' + a.duration.toFixed(2) + 's').join(' + ') +
-    (hasRun ? '' : ' · Shift = 跑（Run 5.3 m/s）');
+    (hasRun ? ' · Shift = 跑' : ' · Shift = 快走');
   window.__clips = { hasRun, names: gltf.animations.map((a) => a.name) };
   if (params.has('pos')) {                      // __spawnAt  例：?pos=-4.4,3.0
     const [sx, sz] = params.get('pos').split(',').map(Number);
@@ -323,6 +323,7 @@ const UP = new THREE.Vector3(0, 1, 0);
 const tmpQ = new THREE.Quaternion();
 let camInit = false;
 let speed = 0;
+
 
 // ---- 玩法状态：重力、跳跃冲量、收集进度 ----
 const PLAYER_R = 0.55;
@@ -438,6 +439,7 @@ function update(dt) {
   );
   if (!camInit) { camera.position.copy(desiredCam); camInit = true; }
   else camera.position.lerp(desiredCam, Math.min(1, dt * 6));
+  camInit = true;
   camera.lookAt(rig.target);
 
   if (forestLook && model) {

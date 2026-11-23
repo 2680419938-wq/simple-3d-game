@@ -124,6 +124,15 @@ Reallusion Character Creator 标准人形骨架、**自带走路动作（10 个�
 - **条带朝向**：`side = tangent × up`（水平面片）。最初照搬参考实现的 `side = tangent × (camera - point)`（billboard），但本项目的追尾镜头几乎**沿切线**看，两者叉积趋零，条带退化成一条线、帧里完全看不见；改成水平面片后从背后就能看到两侧的尾迹。切线用中心差分、UV 按累计弧长参数化，点间距不均时不会被拉伸。
 - **不在深度 pass 里**：光柱的软遮挡要靠半分辨率深度图，特效挂在 `camera.layers` 的 **layer 2**，深度 pass 用 `camera.layers.set(0)` 渲染时自然排除，否则地面光环会把自己写进深度图、把光柱挡掉。
 - **池化**：环（10 个）/ 扬尘（120 颗）都是预分配 + `DynamicDrawUsage`，每帧只重写用到的那部分；拖尾是固定 48 段的三角条带，用 `setDrawRange` 控制绘制量，不新建几何体。
+- **奔跑黑屏（已修）**：拖尾片元原本写 `pow(1.0 - vUv.x, 1.7)`，插值到条带边界会出现 `vUv.x = 1.0000001`，GLSL 里 `pow(负数, 小数)` 是 NaN；NaN 像素被 `UnrealBloomPass` 的低频 mip 抹开后与底图相加，得到整屏 NaN → 全黑。现在两处都 `clamp` 到 `[0,1]`：
+
+  ```glsl
+  float across = clamp(1.0 - abs(vSide), 0.0, 1.0);
+  float along  = pow(clamp(1.0 - vUv.x, 0.0, 1.0), 1.7);
+  float a      = clamp(across * across * along * uOpacity * 0.60, 0.0, 1.0);
+  ```
+
+  复现与二分方法：静止不黑、`?demo=run` 必黑 → `?bloom=0` 正常（说明是后处理链路）→ 逐个关特效定位到拖尾。证据图 `_shots/fx/CMP_black.png`（左：修复前全黑，右：修复后）。
 - **参数标定过程**：第一版环贴图渐变从 0.26 铺到 0.5，加色叠在灰白雾地上糊成一团白雾；收紧到 0.62 才开始透、0.84 达到 0.85 的窄亮环后才读得出「冲击环」的形状。扬尘的 alpha 也从 0.55 降到 0.30，否则落地像爆了个白球。
 - **调试参数**：`?fx=land|pickup` 循环触发、`&fxhold=<秒>` 推进到指定相位后定格（无头截图对比用）、`?still=1` 冻结雾片漂移、`?demo=run` 自动冲刺。证据图 `_shots/fx/CMP_fx.png`。
 - 条带朝向与弧长 UV 的思路来自 MIT 许可的 [achrefelouafi/LinearAbiltyCastingThreeJS](https://github.com/achrefelouafi/LinearAbiltyCastingThreeJS)（`src/effects/RibbonGeometry.js`），实现按本项目的事件循环重写。

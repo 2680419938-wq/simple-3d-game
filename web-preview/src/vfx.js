@@ -136,10 +136,12 @@ class Trail {
         varying float vSide;
         void main() {
           if (uOpacity <= 0.001) discard;
-          float across = 1.0 - abs(vSide);
-          float along = pow(1.0 - vUv.x, 1.7);
-          float a = across * across * along * uOpacity * 0.75;
-          gl_FragColor = vec4(uColor * (0.75 + 0.5 * along), a);
+          float across = clamp(1.0 - abs(vSide), 0.0, 1.0);
+          // 1.0 - vUv.x 在插值边界会微负（1.0000001），pow(负数, 1.7) = NaN；
+          // NaN 像素被 bloom 的低频 mip 抹开后，整屏合成都会变成 NaN → 黑屏。
+          float along = pow(clamp(1.0 - vUv.x, 0.0, 1.0), 1.7);
+          float a = clamp(across * across * along * uOpacity * 0.60, 0.0, 1.0);
+          gl_FragColor = vec4(uColor * (0.45 + 0.35 * along), a);
         }`,
       transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
       side: THREE.DoubleSide, toneMapped: false,
@@ -150,7 +152,7 @@ class Trail {
     this.mesh.visible = false;
     scene.add(this.mesh);
     this.pts = [];
-    this.rise = 0.10;      // 贴地：追尾镜头沿切线看，竖直面片会缩成一条线
+    this.rise = 0.15;      // 贴地但略高于草丛，否则被草叶按深度切成一段段
     this.width = 1.15;     // 比身体宽，追尾视角才能从两侧看到
     this._tan = new THREE.Vector3();
     this._side = new THREE.Vector3();
