@@ -5,8 +5,8 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 
 const SKY_TOP = new THREE.Color(0x8fb0c8);
-const SKY_HOR = new THREE.Color(0xd7dde0);
-const FOG = new THREE.Color(0xbcc8cf);
+const SKY_HOR = new THREE.Color(0xdcd8cb);      // 偏暖，和光柱色温对齐（原 0xd7dde0 偏冷）
+const FOG = new THREE.Color(0xc6c2b2);         // 原 0xbcc8cf 偏冷白，和暖光柱撞色
 
 function skyDome(sunDir) {
   const geo = new THREE.SphereGeometry(400, 32, 16);

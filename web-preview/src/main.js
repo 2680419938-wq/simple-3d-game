@@ -5,7 +5,9 @@ import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { createWorld, stepVertical } from './world.js';
 import { setupForestLook, loadForest } from './forest.js';
 import { addAtmo } from './atmo.js';
-import { createGodRays } from './godrays.js';
+import { createPostFX } from './postfx.js'
+
+const ATMO_SCALE = 0.25;   // 线性空间加色约比 sRGB 亮 4 倍，0.25 与原观感对齐
 
 const canvas = document.getElementById('c');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
@@ -150,13 +152,17 @@ const dbg = (s) => { if (dbgEl && params.has('dbg')) dbgEl.textContent += s + '\
 let forestLook = null;
 let atmo = null;
 let sunT = 0;
-let godrays = null;
+let postfx = null;
 if (useForest) {
   forestLook = setupForestLook(scene, renderer);
-  atmo = addAtmo(scene, forestLook.sunDir);
-  godrays = createGodRays(renderer, scene, camera);
-  godrays.resize();
-  godrays.setEnabled(params.get('rays') === '1');   // 默认关：屏幕空间光柱仍偏灰，?rays=1 开启试用
+  postfx = createPostFX(renderer, scene, camera, {
+    strength: params.has('bs') ? parseFloat(params.get('bs')) : 0.60,
+    threshold: params.has('bt') ? parseFloat(params.get('bt')) : 0.70,
+  });
+  postfx.setEnabled(params.get('bloom') !== '0');   // ?bloom=0 关掉辉光做对照
+  atmo = addAtmo(scene, forestLook.sunDir, params.get('soft') === '0' ? null : postfx.depth,
+    { scale: ATMO_SCALE * (params.has('fogx') ? parseFloat(params.get('fogx')) : 1.0) });
+  camera.layers.enable(1);                          // layer1 = 光柱/雾片（深度图里要排除它们）
   loadForest(scene, '/Forest_Morning.glb', (res) => {
     world.addBoxes(res.boxes);
     const pts = [];
@@ -426,13 +432,12 @@ function update(dt) {
     sunT += dt;
     if (sunT > 0.1) {          // 太阳缓慢移动：方位 ±20°、仰角 8~14°，光柱与天穹跟着同步
       sunT = 0;
-      const t = performance.now() / 1000;
+      const t = params.has('sun') ? parseFloat(params.get('sun')) : performance.now() / 1000;   // ?sun= 冻结太阳位置便于对照
       const az = -0.55 + Math.sin(t / 47) * 0.35;
       const el = 0.20 + Math.sin(t / 61) * 0.05;
       const d = new THREE.Vector3(Math.sin(az) * Math.cos(el), Math.sin(el), Math.cos(az) * Math.cos(el)).normalize();
       forestLook.setSunDir(d);
       if (atmo) atmo.setSunDir(d);
-      if (godrays) godrays.setSunDir(d, 120, model ? model.position : null);
     }
   }
   key.position.set(model ? model.position.x + 5.5 : 5.5, 9, model ? model.position.z + 4.5 : 4.5);
@@ -459,12 +464,12 @@ let acc = 0, frames = 0;
 function tick() {
   const dt = Math.min(clock.getDelta(), 0.05);
   update(dt);
-  if (godrays) godrays.render(camera);
+  if (postfx) { postfx.renderDepth(); postfx.render(); }
   else renderer.render(scene, camera);
   frames++; acc += dt;
   if (acc > 0.5) {
-    const tri = renderer.info.render.triangles;
-    statsEl.textContent = `${(frames / acc).toFixed(0)} fps · ${tri.toLocaleString()} tri · ${renderer.info.render.calls} draw`;
+    const ri = postfx ? postfx.info : renderer.info.render;   // composer 会重置 info，用 postfx 存下的场景 pass 数值
+    statsEl.textContent = `${(frames / acc).toFixed(0)} fps · ${ri.triangles.toLocaleString()} tri · ${ri.calls} draw`;
     frames = 0; acc = 0;
   }
   requestAnimationFrame(tick);
@@ -475,5 +480,5 @@ addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
-  if (godrays) godrays.resize();
+  if (postfx) postfx.resize();
 });

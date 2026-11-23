@@ -76,13 +76,29 @@ Reallusion Character Creator 标准人形骨架、**自带走路动作（10 个�
 - 原 Blender 场景 113 个网格 / 185 万三角 / 全程序化材质（Bark 噪波、Leaf+Grass 顶点色、体积雾），无法直接当游戏资源，
   管线是：删灯光相机与体积雾网格 → **Draco 压缩导出**（33.4 MB → **4.7 MB**）→ three.js 里重建光照。
 - 光照按原场景参数复现：低角度晨光（sun_elevation 0.175 → 太阳仰角约 10°，长投影）、`FogExp2` 0.024 的冷灰雾、
-  天空穹顶用 `ShaderMaterial` 做水平渐变（地平 #d7dde0 → 天顶 #8fb0c8，太阳方向加暖色辉光）、曝光 0.92。
+  天空穹顶用 `ShaderMaterial` 做水平渐变（地平 #dcd8cb → 天顶 #8fb0c8，太阳方向加暖色辉光）、曝光 0.94。
 - 材质按名字重映射（原材质是节点程序化的，glTF 只剩名字）：Bark 深褐、Ground 灰绿、GrassM 绿、Leaf 用自带顶点色
   `leafcol`（GLB 里是 COLOR_0）、BirdSil 近黑；体积雾 `MorningFog` 网格直接丢弃，改由 three.js 的 fog 代替。
 - 碰撞：加载后遍历 `*_Br_` 枝干网格，取 y<1.3 m 的顶点算 XZ 包围盒当树干（45 棵，中位宽 1.17 m），玩家圆半径 0.55 m，
   所以贴着树走会被挡住；树林无高低差，站台逻辑不参与。
 - 收集球改成绕原点两圈的 12 个点，点位不落在树干里。
 - `?scene=arena` 可回到木箱场地测跳跃与踩台面。
+
+### 大气与后处理
+
+- **光柱软遮挡**（`web-preview/src/atmo.js` + `web-preview/src/postfx.js`）：12 根交叉面片光柱 + 3 层贴地雾片是自定义
+  `ShaderMaterial`，片元着色器采样一张**半分辨率场景深度图**，用 `sceneDist` 与自身距离比较得到 `occ`——光柱被树干挡住就淡出，
+  贴着树干前表面时逐渐显现（软粒子写法）。原来的光柱是贴纸式叠加，树干再亮也压不住它，所以看着假。
+  深度图由一次 `overrideMaterial = MeshBasicMaterial({colorWrite:false})` 的 pass 渲出；光柱/雾片在 `camera.layers` 的
+  layer 1 上，渲深度时 `camera.layers.set(0)` 排除掉它们自己。
+- **Bloom**：`EffectComposer`（HalfFloat + 4× MSAA）+ `UnrealBloomPass(strength 0.60, radius 0.55, threshold 0.70)` + `OutputPass`。
+  阈值 0.90 时几乎不出效果（>225 的像素只有个位数），0.55 时整帧洗白（mean 131.8 → 173.0），0.70 只有高光和收集球的边缘发光、
+  整体均值不变。上一版屏幕空间 god rays（`godrays.js`）已删除：28 层径向累加会把远处雾一起点亮，代价换不来收益。
+- **调色**：地平/雾由冷白改暖灰（`forest.js` 的 `SKY_HOR` #dcd8cb、`FOG` #c6c2b2），曝光 0.94，暗角由 `index.html` 的 `#vig` 叠。
+- **亮度标定**：线性空间里加色比原来在 sRGB canvas 上直接加色亮约 4 倍，所以光柱/雾片的基准不透明度统一乘
+  `ATMO_SCALE = 0.25`（`main.js:10`）；同机位实测 mean 121.9 vs 旧 117.8，观感对齐。
+- **调试参数**：`?bloom=0` 关辉光、`?soft=0` 关软遮挡（此时深度采样退回全远纹理，光柱正常但不遮挡）、`?fogx=` 光柱强度倍数、
+  `?bs=`/`?bt=` 辉光强度/阈值、`?sun=<秒>` 冻结太阳位置——太阳默认跟着 `performance.now()` 漂移，不冻结的话两次截图亮度不可比。
 
 ## 玩法原型（three.js，进行中）
 
