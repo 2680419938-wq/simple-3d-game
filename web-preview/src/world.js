@@ -130,8 +130,8 @@ export function createWorld(scene, opts = {}) {
       }
       return hit;
     },
-    /** 拾取 + 球体浮动动画；返回本次收集到的数量 */
-    tick(dt, t, playerPos, radius = 1.15) {
+    /** 拾取 + 球体浮动动画；返回本次收集数量，收集到的球位置可选追加到 out（供特效使用） */
+    tick(dt, t, playerPos, radius = 1.15, out = null) {
       let got = 0;
       for (const o of orbs) {
         if (o.taken) continue;
@@ -140,7 +140,9 @@ export function createWorld(scene, opts = {}) {
         const dx = playerPos.x - o.x, dz = playerPos.z - o.z;
         const dy = playerPos.y + 1.0 - o.mesh.position.y;
         if (dx * dx + dz * dz + dy * dy * 0.35 < radius * radius) {
-          o.taken = true; got++;
+          o.taken = true;
+          got++;
+          if (out) out.push({ x: o.mesh.position.x, y: o.mesh.position.y, z: o.mesh.position.z });
           o.mesh.visible = false; o.ring.visible = false;
         }
       }

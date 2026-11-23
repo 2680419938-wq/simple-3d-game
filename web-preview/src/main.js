@@ -5,7 +5,8 @@ import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { createWorld, stepVertical } from './world.js';
 import { setupForestLook, loadForest } from './forest.js';
 import { addAtmo } from './atmo.js';
-import { createPostFX } from './postfx.js'
+import { createPostFX } from './postfx.js';
+import { createVfx } from './vfx.js';
 
 const ATMO_SCALE = 0.25;   // 线性空间加色约比 sRGB 亮 4 倍，0.25 与原观感对齐
 
@@ -25,9 +26,12 @@ scene.fog = new THREE.Fog(0x0e1116, 22, 60);
 const params = new URLSearchParams(location.search);
 const useForest = params.get('scene') !== 'arena';   // 默认森林场景，?scene=arena 回木箱场地
 const camera = new THREE.PerspectiveCamera(48, window.innerWidth / window.innerHeight, 0.1, 520);
+camera.layers.enable(2);            // layer2 = 事件特效，故意排除在光柱用的深度通道外
 
 const pmrem = new THREE.PMREMGenerator(renderer);
 scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+
+const vfx = createVfx(scene, camera);
 if ('environmentIntensity' in scene) scene.environmentIntensity = 0.55;
 
 const hemi = new THREE.HemisphereLight(0x9fb6d8, 0x1a1f27, 0.55);
@@ -124,6 +128,11 @@ const CROUCH_SPEED = 1.3;   // 蹲走支撑脚实测 0.44m/16帧 与 0.34m/13帧
 const CROUCH_RATE = 1.5;   // Crouching.fbx 99 帧 @24fps，1.5× 下蹲约 2.7 s
 const JUMP_RATE = 1.15;   // 片段滞空 0.75 s / 物理滞空 0.663 s → 1.13~1.15，起跳与落地帧才对得上   // 跳跃原长 1.875 s，加快到 ~1.39 s
 let jumpT = 0;            // 剩余跳跃时间，>0 时压住行走状态机
+let fxDemo = params.get('fx');     // ?fx=land|pickup 循环触发特效；配合 &fxhold=<秒> 定格在该相位
+let fxNext = 0;
+let fxFrozen = false;
+let sprintT = 0;
+const picked = [];   // 本帧收集到的球，复用一个数组避免每帧分配
 const WALK_SPEED = 0.66;   // 异形 walk：36.4 帧/循环 @24fps，单脚支撑位移 0.50 m → 0.66 m/s
 const RUN_SPEED = 5.30;    // 真 Run 动作（Fast Run 重定向）：支撑脚实测后退 0.22 m/帧 @24fps → 5.3 m/s
 const LEAN_MAX = 0.15;     // 跑时前倾 8.6°，让加速的 Walk 读起来像冲刺
@@ -388,12 +397,21 @@ function update(dt) {
       if (takeoffT < 0) { vy = JUMP_V; }
     }
     const gh = world.groundAt(model.position.x, model.position.z, py);
+    const impactVy = vy;
     const st = stepVertical({ py, vy, grounded }, dt, GRAV, gh);
     py = st.py; vy = st.vy; grounded = st.grounded;
     model.position.y = py;
+    if (!wasGrounded && grounded) {
+      vfx.landing(model.position.x, py, model.position.z, THREE.MathUtils.clamp(-impactVy / JUMP_V, 0.35, 1.5));
+    }
+    const sprinting = grounded && speed > RUN_SPEED * 0.55;
+    vfx.trailPoint(model.position.x, py, model.position.z, sprinting);
+    if (sprinting && (sprintT -= dt) <= 0) { sprintT = 0.07; vfx.sprintDust(model.position.x, py, model.position.z); }
 
     if (!finished) {
-      collected += world.tick(dt, performance.now() / 1000, { x: model.position.x, y: py, z: model.position.z });
+      picked.length = 0;
+      collected += world.tick(dt, performance.now() / 1000, { x: model.position.x, y: py, z: model.position.z }, 1.15, picked);
+      for (const orb of picked) vfx.pickup(orb.x, orb.y, orb.z, py);
       playTime += dt;
       if (world.total > 0 && collected >= world.total) { finished = true; jumpT = 0; }
     } else {
@@ -428,8 +446,8 @@ function update(dt) {
     forestLook.sun.target.updateMatrixWorld();
     forestLook.sun.shadow.camera.updateProjectionMatrix();
     forestLook.sky.position.copy(camera.position);
-    if (atmo) atmo.update(dt, model.position);
-    sunT += dt;
+    if (atmo && !params.has('still')) atmo.update(dt, model.position);   // ?still=1 冻结雾片漂移，便于逐像素对照
+    if (!params.has('still')) sunT += dt;
     if (sunT > 0.1) {          // 太阳缓慢移动：方位 ±20°、仰角 8~14°，光柱与天穹跟着同步
       sunT = 0;
       const t = params.has('sun') ? parseFloat(params.get('sun')) : performance.now() / 1000;   // ?sun= 冻结太阳位置便于对照
@@ -440,6 +458,19 @@ function update(dt) {
       if (atmo) atmo.setSunDir(d);
     }
   }
+  if (fxDemo && model) {
+    const fire = () => {
+      const p = model.position;
+      if (fxDemo === 'land') vfx.landing(p.x, py, p.z, 1.35);
+      else vfx.pickup(p.x + 0.4, py + 1.05, p.z - 1.2, py);
+    };
+    if (params.has('fxhold')) {          // 定格：先推进到指定相位，之后不再推进
+      fire();
+      for (let i = 0, n = Math.round(parseFloat(params.get('fxhold')) * 60); i < n; i++) vfx.update(1 / 60);
+      fxDemo = null; fxFrozen = true;
+    } else if ((fxNext -= dt) <= 0) { fxNext = 0.9; fire(); }
+  }
+  vfx.update(fxFrozen ? 0 : dt);
   key.position.set(model ? model.position.x + 5.5 : 5.5, 9, model ? model.position.z + 4.5 : 4.5);
   ground.position.set(model ? model.position.x : 0, 0, model ? model.position.z : 0);
   grid.position.x = ground.position.x;

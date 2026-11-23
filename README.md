@@ -111,6 +111,23 @@ Reallusion Character Creator 标准人形骨架、**自带走路动作（10 个�
 - **测试**：`cd web-preview && node test/world.mjs && node test/physics.mjs` —— 撞墙停在墙前、台面高度、拾取去重、跳跃顶点/滞空、走空掉落，11 + 5 项全通过。
 - **调试参数**：`?pos=x,z` 指定落点、`?dist=`/`?pitch=`/`?yaw=` 定视角、`?jump=1&jd=<ms>` 自动起跳。
 
+### 事件特效
+
+三个事件各有反馈（`web-preview/src/vfx.js`，全部是程序化生成，没有额外贴图文件）：
+
+- **拾取**：两圈地面扩散环（冷青 `0x9fe4ff` + 白色快闪）+ 球心一团上飘的细尘。环挂在**地面高度**、闪光挂在球的真实坐标，两者分开传参。
+- **落地**：按落地竖直速度决定强度（`-impactVy / JUMP_V` 夹到 0.35..1.5）——环从 0.22 扩到 0.85+0.35·s、0.34 s 内淡出，暖土色 `0xd9c49a`（和拾取的冷光区分开），同时踢起 8–23 颗扬尘。
+- **冲刺**：贴地拖尾条带（宽 1.15 m，尾部按弧长收窄 55%）+ 每 0.07 s 一撮脚步扬尘；速度掉到 `RUN_SPEED × 0.55` 以下后 0.5 s 内淡出。
+
+实现要点：
+
+- **条带朝向**：`side = tangent × up`（水平面片）。最初照搬参考实现的 `side = tangent × (camera - point)`（billboard），但本项目的追尾镜头几乎**沿切线**看，两者叉积趋零，条带退化成一条线、帧里完全看不见；改成水平面片后从背后就能看到两侧的尾迹。切线用中心差分、UV 按累计弧长参数化，点间距不均时不会被拉伸。
+- **不在深度 pass 里**：光柱的软遮挡要靠半分辨率深度图，特效挂在 `camera.layers` 的 **layer 2**，深度 pass 用 `camera.layers.set(0)` 渲染时自然排除，否则地面光环会把自己写进深度图、把光柱挡掉。
+- **池化**：环（10 个）/ 扬尘（120 颗）都是预分配 + `DynamicDrawUsage`，每帧只重写用到的那部分；拖尾是固定 48 段的三角条带，用 `setDrawRange` 控制绘制量，不新建几何体。
+- **参数标定过程**：第一版环贴图渐变从 0.26 铺到 0.5，加色叠在灰白雾地上糊成一团白雾；收紧到 0.62 才开始透、0.84 达到 0.85 的窄亮环后才读得出「冲击环」的形状。扬尘的 alpha 也从 0.55 降到 0.30，否则落地像爆了个白球。
+- **调试参数**：`?fx=land|pickup` 循环触发、`&fxhold=<秒>` 推进到指定相位后定格（无头截图对比用）、`?still=1` 冻结雾片漂移、`?demo=run` 自动冲刺。证据图 `_shots/fx/CMP_fx.png`。
+- 条带朝向与弧长 UV 的思路来自 MIT 许可的 [achrefelouafi/LinearAbiltyCastingThreeJS](https://github.com/achrefelouafi/LinearAbiltyCastingThreeJS)（`src/effects/RibbonGeometry.js`），实现按本项目的事件循环重写。
+
 ## 角色指标（龙人，实测）
 
 - 身高 2.010 m，脚底 y=0，轴心在双脚踝中点；面向 +Z，Y-up，1 单位 = 1 米
