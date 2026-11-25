@@ -53,11 +53,32 @@ Reallusion Character Creator 标准人形骨架、**自带走路动作（10 个�
 | --- | --- |
 | `dragon-man-final/` | **成品 GLB**：异形 `Alien_Walk_Jump_2k.glb` + 龙人 T/A-Pose、Walk、Run |
 | `异形/` | 异形原始 437 MB 素材（4K 原版，本地保留，不进仓库） |
-| `AnimLib/` | **动作导入器**：`retarget_import.py`（Mixamo → 龙人）、`mixamo_retarget.py`（Mixamo → 异形 CC 骨架，含中立帧归一化/去根位移/逐帧贴地）、`style_run.py`（前倾/低头/收肘风格化）、`ground_run.py`（逐帧抬升防穿地）、`alien_jump_build.py`（重定向 Jumping.fbx → Idle/Walk/Jump 打包）、`alien_clip_add.py`（往主 GLB 追加任意 Mixamo 动作：中立帧/world 模式、根位移、整段+逐帧贴地、前倾风格化） |
+| `AnimLib/` | **素材验收**：`inspect_fbx.py`（丢进来的 Mixamo FBX 先过这一关：版本 7100+ / 帧率 / 骨架 / 动作时长 / 髋部水平漂移，判定能不能进管线）。**动作导入器**：`retarget_import.py`（Mixamo → 龙人）、`mixamo_retarget.py`（Mixamo → 异形 CC 骨架，含中立帧归一化/去根位移/逐帧贴地）、`style_run.py`（前倾/低头/收肘风格化）、`ground_run.py`（逐帧抬升防穿地）、`alien_jump_build.py`（重定向 Jumping.fbx → Idle/Walk/Jump 打包）、`alien_clip_add.py`（往主 GLB 追加任意 Mixamo 动作：中立帧/world 模式、根位移、整段+逐帧贴地、前倾风格化） |
 | `web-preview/` | three.js 网页预览 + **玩法原型**（零依赖 `node tools/serve.mjs`）：动作播放、关卡碰撞、跳跃、收集，`test/` 下有 node 测试 |
 | `dragon-men-rebuild/` | 龙人生成管线脚本（Blender Python） |
 | `启动预览.cmd` | 一键起本地预览服务 |
 | `同步到gitee.cmd` | 一键提交并推送 |
+
+## 素材验收（Mixamo）
+
+丢进 `D:\浏览器·\` 之前先确认这几项，否则白下：
+
+| 项 | 要求 | 为什么 |
+| --- | --- | --- |
+| Format | FBX Binary | 管线只认 FBX；glTF 也行但要另写导入 |
+| Skin | 动作 Without Skin / 角色 With Skin | 动作套现有骨架，角色要网格贴图 |
+| FPS | 24（30 也接受） | 管线按时间重采样到 24 |
+| Keyframe Reduction | none | 减帧会毁掉攻击动作的起始相位 |
+| In Place | 有根位移的动作（walk/run/冲刺攻击）**勾上** | 省掉后期去根位移，游戏里位移由代码驱动 |
+| FBX 版本 | 7100+ | Blender 5.x 打不开 6100 这类老格式 |
+
+下载后先跑验收：
+
+```
+blender -b --python AnimLib/inspect_fbx.py -- "D:\浏览器·\xxx.fbx"
+```
+
+输出形如 `OK standing walk forward.fbx v7700 24fps 骨37(mixamorig:) 网格0 动作1` + `clip … 1.17s 原地`。版本过低会直接 `FAIL`（打包资源包里常见）。
 
 ## 快速上手
 
