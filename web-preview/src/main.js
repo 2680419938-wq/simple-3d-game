@@ -7,6 +7,7 @@ import { setupForestLook, loadForest } from './forest.js';
 import { addAtmo } from './atmo.js';
 import { createPostFX } from './postfx.js';
 import { createVfx } from './vfx.js';
+import { loadEnemyAssets, Enemy, ENEMY } from './enemy.js';
 
 const ATMO_SCALE = 0.25;   // 线性空间加色约比 sRGB 亮 4 倍，0.25 与原观感对齐
 
@@ -314,6 +315,67 @@ function startJump() {
   jumpT = a.getClip().duration / JUMP_RATE;
 }
 
+// ---- 战斗：玩家挥击 + 僵尸（动作是 public/models/zombie 下的 Mixamo FBX，占位体格）----
+const ATTACK = { startup: 0.10, active: 0.12, recovery: 0.22, reach: 1.9, dot: 0.35, dmg: 20, cd: 0.45, lunge: 3.4 };
+const ATK_TOTAL = ATTACK.startup + ATTACK.active + ATTACK.recovery;
+const SPAWNS = [[4.4, 3.2], [-4.6, 2.8], [1.2, -5.4], [-3.4, -4.8], [5.8, -1.2], [-6.2, -0.6]];
+const enemies = [];
+let enemyAssets = null, wave = 0, waveT = 0;
+let hp = 100, hpMax = 100, hurtT = 0, downT = 0;
+let atkT = 0, atkHit = false, atkCD = 0;
+
+function spawnWave() {
+  if (!enemyAssets) return;
+  const n = Math.min(1 + wave, 4);
+  for (let i = 0; i < n; i++) {
+    const [sx, sz] = SPAWNS[(wave * 2 + i) % SPAWNS.length];
+    const e = new Enemy(enemyAssets, { x: sx, y: world.groundAt(sx, sz, 3), z: sz });
+    scene.add(e.root);
+    enemies.push(e);
+  }
+  wave++;
+}
+
+loadEnemyAssets()
+  .then((a) => { enemyAssets = a; spawnWave(); })
+  .catch((e) => { console.error('enemy load failed', e); dbg('enemy ERR ' + (e && e.message)); });
+
+function startAttack() {
+  if (!model || atkT > 0 || atkCD > 0 || !grounded || crouched || downT > 0) return;
+  atkT = ATK_TOTAL;
+  atkHit = false;
+  atkCD = ATTACK.cd;
+  vfx.slash(model.position.x, py, model.position.z, modelYaw);
+}
+
+function attackHit() {
+  const fx = Math.sin(modelYaw), fz = Math.cos(modelYaw);
+  for (const e of enemies) {
+    if (!e.alive) continue;
+    const dx = e.root.position.x - model.position.x;
+    const dz = e.root.position.z - model.position.z;
+    const d = Math.hypot(dx, dz);
+    if (d > ATTACK.reach + ENEMY.radius) continue;
+    if ((dx * fx + dz * fz) / (d || 1) < ATTACK.dot) continue;   // 只打正面 ±70°
+    const killed = e.hurt(ATTACK.dmg, { x: fx, z: fz });
+    vfx.landing(e.root.position.x, e.root.position.y, e.root.position.z, killed ? 1.1 : 0.6);
+  }
+}
+
+function hurtPlayer(dmg) {
+  if (hurtT > 0 || downT > 0) return;
+  hp = Math.max(0, hp - dmg);
+  hurtT = 0.6;                                   // 无敌帧，避免被同一记攻击连扣
+  vfx.landing(model.position.x, py, model.position.z, 0.9);
+  if (hp <= 0) {
+    hp = hpMax;
+    downT = 1.4;
+    model.position.set(0, 0, 0);
+    py = world.groundAt(0, 0, 3); vy = 0; grounded = true;
+  }
+}
+
+
 const forward = new THREE.Vector3();
 const right = new THREE.Vector3();
 const moveDir = new THREE.Vector3();
@@ -336,12 +398,18 @@ const gameEl = document.getElementById('game');
 function resetGame() {
   py = 0; vy = 0; grounded = true; takeoffT = -1;
   collected = 0; playTime = 0; finished = false;
+  hp = hpMax; hurtT = 0; downT = 0; atkT = 0; atkCD = 0; atkHit = false;
+  wave = 0; waveT = 0;
+  for (const e of enemies) if (e.root.parent) e.root.parent.remove(e.root);
+  enemies.length = 0;
+  spawnWave();
   if (model) { model.position.set(0, 0, 0); modelYaw = 0; }
   for (const o of world.orbs) { o.taken = false; o.mesh.visible = true; o.ring.visible = true; }
 }
 addEventListener('keydown', (e) => {
   if (e.code === 'KeyR') resetGame();
   if (e.code === 'KeyC' && (actions.crouch || actions.crouchwalk) && grounded) crouched = !crouched;
+  if (e.code === 'KeyJ') startAttack();
 });
 
 function update(dt) {
@@ -409,6 +477,42 @@ function update(dt) {
     vfx.trailPoint(model.position.x, py, model.position.z, sprinting);
     if (sprinting && (sprintT -= dt) <= 0) { sprintT = 0.07; vfx.sprintDust(model.position.x, py, model.position.z); }
 
+    // 挥击推进：前冲相位 + 命中窗口（startup 结束那一刻判一次）
+    atkCD = Math.max(0, atkCD - dt);
+    if (hurtT > 0) hurtT -= dt;
+    if (downT > 0) downT -= dt;
+    if (atkT > 0) {
+      atkT -= dt;
+      const el = ATK_TOTAL - atkT;
+      if (el < ATTACK.startup + ATTACK.active) {
+        model.position.x += Math.sin(modelYaw) * ATTACK.lunge * dt;
+        model.position.z += Math.cos(modelYaw) * ATTACK.lunge * dt;
+        world.resolve(model.position, PLAYER_R, py);
+      }
+      if (!atkHit && el >= ATTACK.startup) { atkHit = true; attackHit(); }
+    }
+
+    if (enemies.length) {
+      const pp = { x: model.position.x, y: py, z: model.position.z };
+      for (const e of enemies) {
+        e.update(dt, pp, world.groundAt, world.resolve);
+        if (e.consumeHit()) {
+          const dx = model.position.x - e.root.position.x;
+          const dz = model.position.z - e.root.position.z;
+          if (Math.hypot(dx, dz) <= ENEMY.reach + 0.35) hurtPlayer(ENEMY.dmg);
+        }
+      }
+      if (enemies.every((e) => !e.alive)) {
+        waveT += dt;
+        if (waveT > 2.8 && wave < 3) {     // 清场 2.8 s 后下一波，最多 3 波
+          waveT = 0;
+          for (const e of enemies) if (e.root.parent) e.root.parent.remove(e.root);
+          enemies.length = 0;
+          spawnWave();
+        }
+      }
+    }
+
     if (!finished) {
       picked.length = 0;
       collected += world.tick(dt, performance.now() / 1000, { x: model.position.x, y: py, z: model.position.z }, 1.15, picked);
@@ -419,9 +523,11 @@ function update(dt) {
       world.tick(dt, performance.now() / 1000, { x: 1e9, y: 0, z: 0 });
     }
     if (gameEl) {
+      const alive = enemies.filter((e) => e.alive).length;
+      const head = downT > 0 ? '被击倒 · 重生中' : `HP ${Math.round(hp)} / ${hpMax}`;
       gameEl.textContent = finished
         ? `通关！${playTime.toFixed(1)} s · 按 R 重开`
-        : `收集 ${collected} / ${world.total} · ${playTime.toFixed(1)} s`;
+        : `${head} · 僵尸 ${alive} · 第 ${Math.max(1, Math.min(wave, 3))} 波 · 收集 ${collected} / ${world.total} · ${playTime.toFixed(1)} s`;
       gameEl.classList.toggle('win', finished);
     }
     rig.target.lerp(

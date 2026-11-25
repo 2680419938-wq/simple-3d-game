@@ -222,8 +222,46 @@ class Trail {
   }
 }
 
+function slashTex() {
+  const s = 128;
+  const cv = document.createElement('canvas'); cv.width = cv.height = s;
+  const g = cv.getContext('2d');
+  const grd = g.createLinearGradient(0, s, s, 0);      // 起手淡、收尾亮
+  grd.addColorStop(0.00, 'rgba(255,255,255,0)');
+  grd.addColorStop(0.55, 'rgba(255,255,255,0.55)');
+  grd.addColorStop(1.00, 'rgba(255,255,255,0.95)');
+  g.strokeStyle = grd;
+  g.lineWidth = 13;
+  g.lineCap = 'round';
+  g.beginPath();
+  g.arc(s / 2, s / 2, s * 0.34, -0.35, 2.15);
+  g.stroke();
+  const t = new THREE.CanvasTexture(cv);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
+// 挥击弧光：一块薄平面，法线朝角色正前方（追尾镜头下正好看到弧面），缩放外扩并淡出
+function makeSlashPool(scene, tex, n) {
+  const geo = new THREE.PlaneGeometry(2, 2);
+  const pool = [];
+  for (let i = 0; i < n; i++) {
+    const mat = new THREE.MeshBasicMaterial({
+      map: tex, transparent: true, opacity: 0, blending: THREE.AdditiveBlending,
+      depthWrite: false, side: THREE.DoubleSide, toneMapped: false,
+    });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.layers.set(LAYER);
+    mesh.visible = false;
+    scene.add(mesh);
+    pool.push({ mesh, t: 0, life: 0, size: 1 });
+  }
+  return pool;
+}
+
 export function createVfx(scene, camera) {
   const rings = makeRingPool(scene, radialRing(), 10);
+  const slashes = makeSlashPool(scene, slashTex(), 4);
   const dust = makeDust(scene, radialDot(), 120);
   const trail = new Trail(scene);
   let trailOpacity = 0;
@@ -274,6 +312,20 @@ export function createVfx(scene, camera) {
       ring(x, y, z, { color: 0xd9c49a, from: 0.22, to: 0.85 + 0.35 * s, life: 0.36, peak: 0.70 });   // 暖土色，和拾取的冷光分开
       puff(x, y, z, Math.round(8 + 10 * s), 1.2 * s, 1.0);
     },
+    /** 玩家挥击：身前一记斜向弧光（yaw = 角色朝向） */
+    slash(x, y, z, yaw) {
+      let e = slashes.find((s) => s.t >= s.life) || slashes[0];
+      const fwd = Math.sin(yaw), fzc = Math.cos(yaw);
+      e.mesh.position.set(x + fwd * 0.95, y + 1.05, z + fzc * 0.95);
+      e.mesh.rotation.set(0, yaw, 0);
+      e.mesh.rotateZ(-0.55);              // 斜劈，不是横平的一道
+      e.mesh.rotation.y = yaw;
+      e.mesh.material.color.set(0xbfe4ff);
+      e.t = 0;
+      e.life = 0.26;
+      e.size = 1;
+      e.mesh.visible = true;
+    },
     /** 冲刺时脚步扬尘：每 0.07 s 一撮，向后外侧散开 */
     sprintDust(x, groundY, z) {
       puff(x, groundY + 0.02, z, 2, 0.35, 0.5, 0.55, 0.5);
@@ -295,6 +347,14 @@ export function createVfx(scene, camera) {
         const k = e.t / e.life;
         e.mesh.scale.setScalar(e.from + (e.to - e.from) * (1 - (1 - k) * (1 - k)));
         e.mesh.material.opacity = e.peak * (1 - k) * (1 - k);
+      }
+
+      for (const e of slashes) {
+        if (e.t >= e.life) { e.mesh.visible = false; continue; }
+        e.t = Math.min(e.life, e.t + dt);
+        const k = e.t / e.life;
+        e.mesh.scale.setScalar(0.85 + 0.5 * k);
+        e.mesh.material.opacity = 0.85 * (1 - k) * (1 - k);
       }
 
       {
