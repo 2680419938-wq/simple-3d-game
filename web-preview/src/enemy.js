@@ -33,7 +33,8 @@ export function stripRootDrift(clip, unit) {
     v[i * 3 + 1] -= dy * k;
     v[i * 3 + 2] -= dz * k;
   }
-  return (Math.hypot(dx, dz) * unit) / clip.duration;
+  // 三个分量都要算：FBX 里漂移落在轨道 z 上，烘进 GLB 后髋骨朝向让同一段位移落在轨道 y 上
+  return (Math.hypot(dx, dy, dz) * unit) / clip.duration;
 }
 const GLB = '/models/zombie/zombiegirl.glb';
 
@@ -340,7 +341,8 @@ export class Enemy {
         const sp = this.gait === 'run' ? ENEMY.runSpeed : ENEMY.walkSpeed;
         p.x += (dx / dist) * sp * dt;
         p.z += (dz / dist) * sp * dt;
-        const rate = this.clipSpeed[this.gait] ? sp / this.clipSpeed[this.gait] : 1;
+        const cs = this.clipSpeed[this.gait];
+        const rate = cs > 0.05 ? THREE.MathUtils.clamp(sp / cs, 0.25, 4) : 1;
         this.play(this.gait, 0.28, rate);   // 不用 warp：它会在淡入结束把 timeScale 覆回 1，脚下又开始滑
         this.state = 'chase';
       } else if (seen) {
