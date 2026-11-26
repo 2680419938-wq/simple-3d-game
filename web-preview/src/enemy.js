@@ -1,7 +1,8 @@
-// 敌人：Mixamo 僵尸动作直接播（AnimSource/zombie_pack 里挑了 5 条，转存到 public/models/zombie）。
-// 这些 FBX 只有骨架没有蒙皮网格，所以可视部分用挂在骨骼上的基本体拼出来当占位体格；
-// 真皮肤网格到位后只需换 proto，动作与状态机不动。
+// 敌人：Zombiegirl 蒙皮网格（AnimLib/zombiegirl_build.py 烘的 GLB）＋ 5 条 Mixamo 僵尸动作。
+// 烘的时候就按 24 fps 把动作烤进了同一套 mixamorig 骨架上，网页端不需要任何重定向。
+// GLB 加载失败则退回旧路：没有蒙皮的 FBX 骨架 + 挂在骨骼上的基本体占位体格。
 import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
 import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
 
@@ -13,7 +14,8 @@ const SRC = {
   death: '/models/zombie/death.fbx',
 };
 
-const CM = 0.01;   // Mixamo 骨架坐标以厘米为单位（髋高 92.5），整体缩到米
+const CM = 0.01;   // 裸 FBX 骨架以厘米为单位（髋高 92.5）；烘好的 GLB 已经烘进 0.01，缩放取 1
+const GLB = '/models/zombie/zombiegirl.glb';
 
 export const ENEMY = {
   hp: 30,
@@ -134,7 +136,22 @@ function clipOf(obj, name) {
   return out;
 }
 
+// 烘好的 GLB：{ proto: 蒙皮网格根节点, clips: {idle,walk,run,attack,death}, scale: 1 }
+async function loadGlb() {
+  const gltf = await new Promise((res, rej) => new GLTFLoader().load(GLB, res, undefined, rej));
+  const clips = {};
+  for (const c of gltf.animations) clips[c.name] = c;
+  for (const k in SRC) if (!clips[k]) throw new Error('glb missing clip ' + k);
+  gltf.scene.updateMatrixWorld(true);
+  return { proto: gltf.scene, clips, scale: 1 };
+}
+
 export async function loadEnemyAssets() {
+  try {
+    return await loadGlb();
+  } catch (err) {
+    console.warn('[enemy] GLB 加载失败，退回占位体格', err);
+  }
   const loader = new FBXLoader();
   const one = (url) => new Promise((res, rej) => loader.load(url, res, undefined, rej));
   const [idle, walk, run, attack, death] = await Promise.all(Object.values(SRC).map(one));
@@ -147,7 +164,7 @@ export async function loadEnemyAssets() {
     attack: clipOf(attack, 'Attack'),
     death: clipOf(death, 'Death'),
   };
-  return { proto: idle, clips };
+  return { proto: idle, clips, scale: CM };
 }
 
 const _wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
@@ -155,7 +172,7 @@ const _wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 export class Enemy {
   constructor(assets, opts) {
     this.root = cloneSkinned(assets.proto);
-    this.root.scale.setScalar(CM);
+    this.root.scale.setScalar(assets.scale ?? CM);
     this.root.position.set(opts.x, opts.y || 0, opts.z);
     this.root.traverse((o) => {
       if (!o.isMesh) return;

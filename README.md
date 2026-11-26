@@ -53,7 +53,7 @@ Reallusion Character Creator 标准人形骨架、**自带走路动作（10 个�
 | --- | --- |
 | `dragon-man-final/` | **成品 GLB**：异形 `Alien_Walk_Jump_2k.glb` + 龙人 T/A-Pose、Walk、Run |
 | `异形/` | 异形原始 437 MB 素材（4K 原版，本地保留，不进仓库） |
-| `AnimLib/` | **素材验收**：`inspect_fbx.py`（丢进来的 Mixamo FBX 先过这一关：版本 7100+ / 帧率 / 骨架 / 动作时长 / 髋部水平漂移，判定能不能进管线）。**动作导入器**：`retarget_import.py`（Mixamo → 龙人）、`mixamo_retarget.py`（Mixamo → 异形 CC 骨架，含中立帧归一化/去根位移/逐帧贴地）、`style_run.py`（前倾/低头/收肘风格化）、`ground_run.py`（逐帧抬升防穿地）、`alien_jump_build.py`（重定向 Jumping.fbx → Idle/Walk/Jump 打包）、`alien_clip_add.py`（往主 GLB 追加任意 Mixamo 动作：中立帧/world 模式、根位移、整段+逐帧贴地、前倾风格化） |
+| `AnimLib/` | **素材验收**：`inspect_fbx.py`（丢进来的 Mixamo FBX 先过这一关：版本 7100+ / 帧率 / 骨架 / 动作时长 / 髋部水平漂移，判定能不能进管线）。**动作导入器**：`retarget_import.py`（Mixamo → 龙人）、`mixamo_retarget.py`（Mixamo → 异形 CC 骨架，含中立帧归一化/去根位移/逐帧贴地）、`style_run.py`（前倾/低头/收肘风格化）、`ground_run.py`（逐帧抬升防穿地）、`alien_jump_build.py`（重定向 Jumping.fbx → Idle/Walk/Jump 打包）、`alien_clip_add.py`（往主 GLB 追加任意 Mixamo 动作：中立帧/world 模式、根位移、整段+逐帧贴地、前倾风格化）、`zombiegirl_build.py`（Mixamo With Skin 角色 → 网页用敌人 GLB：贴图去重降 1K、烘 NLA 动作轨） |
 | `web-preview/` | three.js 网页预览 + **玩法原型**（零依赖 `node tools/serve.mjs`）：动作播放、关卡碰撞、跳跃、收集，`test/` 下有 node 测试 |
 | `dragon-men-rebuild/` | 龙人生成管线脚本（Blender Python） |
 | `启动预览.cmd` | 一键起本地预览服务 |
@@ -158,17 +158,21 @@ blender -b --python AnimLib/inspect_fbx.py -- "D:\浏览器·\xxx.fbx"
 - **调试参数**：`?fx=land|pickup` 循环触发、`&fxhold=<秒>` 推进到指定相位后定格（无头截图对比用）、`?still=1` 冻结雾片漂移、`?demo=run` 自动冲刺。证据图 `_shots/fx/CMP_fx.png`。
 - 条带朝向与弧长 UV 的思路来自 MIT 许可的 [achrefelouafi/LinearAbiltyCastingThreeJS](https://github.com/achrefelouafi/LinearAbiltyCastingThreeJS)（`src/effects/RibbonGeometry.js`），实现按本项目的事件循环重写。
 
-### 战斗（占位敌人，进行中）
+### 战斗
 
-僵尸的 12 条动作来自 Mixamo「Scary Zombie Pack」（见上面素材验收），挑 5 条转存到 `web-preview/public/models/zombie/`：`idle / walk / run / attack / death`（共 1.49 MB）。这些 FBX **只有骨架、没有蒙皮网格**，所以敌人的可视部分是给骨骼挂基本体拼出来的占位体格（`web-preview/src/enemy.js` 的 `buildPuppet`）：躯干/四肢是贴在骨段上的盒子（盒子沿「本骨 → 子骨」的局部向量摆放，不依赖骨骼的轴约定），头是球 + 两只自发光眼，手上有三根锥形爪。真皮肤网格到位后只换 `proto`，状态机与动作不动。
+僵尸动作来自 Mixamo「Scary Zombie Pack」（见上面素材验收），挑 5 条转存到 `web-preview/public/models/zombie/`：`idle / walk / run / attack / death`（FBX，共 1.49 MB）。敌人网格是另一份 Mixamo **With Skin** 下载的 `Zombiegirl W Kurniawan.fbx`（7700 版、63 骨——比动作多 36 根指骨、4 张 2048² 贴图已内嵌、Armature scale 0.01、整体高 2.038 m）。
 
+- **烘焙成 GLB**：`blender -b --python AnimLib/zombiegirl_build.py` → `web-preview/public/models/zombie/zombiegirl.glb`（4.46 MB）。脚本做四件事：贴图按 filepath 去重、降到 1K；断开 Principled 的 Specular 输入（省掉 `KHR_materials_specular` 那张 1.3 MB 的贴图）；删掉模型自带的动作；把 5 条僵尸动作当作 **NLA 轨**挂到女僵尸骨架上一起导出，于是 GLB 里直接带 5 条 glTF animation（每条 189 通道 = 63 骨 × 3）。
+- **为什么非要在 Blender 里烘**：three 直接读那份 FBX 得到的骨架，和 Blender 转出来的 GLB 骨架，**每根骨的局部坐标系不一样**（FBX 里 hips 的局部平移是 `(0, 92.5, 0)` 那套轴；转成 GLB 后是 `(0, -0.29, -107.59)`，因为 0.01 缩放和 -90° X 旋转落在 Armature 节点上）。把 FBX 里的 clip 直接套到 GLB 骨架上实测：髋部掉到 0.00、头到 -0.25 —— 整个人躺在地上。所以动作必须与骨架在同一个坐标系里生成，不能跨管线拼。
+- **运行期加载**：`loadEnemyAssets()` 先读 GLB（`assets.scale = 1`，0.01 已经烘在 Armature 节点上）；读失败则退回旧路——无蒙皮 FBX 骨架 + `buildPuppet()` 用贴在骨段上的盒子拼的占位体格（`assets.scale = 0.01`）。指骨没有动作轨道，会保持绑定姿势。
 - **为什么能直接用**：`three/addons/loaders/FBXLoader.js` 能读这些 FBX（37 根 `mixamorig` 骨，`obj.animations` 里就是动作），所以不需要 Blender 转 GLB。注意骨架单位是**厘米**（髋高 92.555），实例要整体 ×0.01；模型自身朝 +Z（左脚步在 +X 侧）。
 - **数值**（`enemy.js` 的 `ENEMY`）：30 HP、走 1.25 m/s、跑 3.0 m/s、视野 15 m、攻击距离 1.9 m、12 伤、攻击冷却 1.6 s、死亡 2.6 s 后隐藏。僵尸攻击片段 2.62 s 太长，用 2× 速播到 1.31 s。
 - **玩家挥击**：`J` 键，`startup 0.10 / active 0.12 / recovery 0.22` 三段；命中在 startup 结束那一帧判一次（前伸 1.9 m + 敌人半径、只打正面朝向点积 ≥ 0.35 即 ±70°），前冲 3.4 m/s 带碰撞；命中 20 伤、冷却 0.45 s。主角**还没有真正的攻击动画**，现在靠前冲 + 身前那道斜向弧光（`vfx.slash`）撑读感。
 - **受击与波次**：玩家 100 HP，被打 12 点、0.6 s 无敌帧、归零回原点满血；一波清空 2.8 s 后刷下一波，最多 3 波（1/2/3/4 只）。
 - **HUD**：游戏行变成 `HP 100 / 100 · 僵尸 1 · 第 1 波 · 收集 0 / 12 · 0.4 s`，被击倒时显示「被击倒 · 重生中」。
-- **测试**：`node test/enemy.mjs`（16 项）验骨架骨数、占位体格高度与脚底、动作确实在驱动骨骼（手臂骨四元数与 rest pose 的夹角 > 0.05）、追击位移、20 伤存活 / 再 20 伤阵亡播 death、2.6 s 后隐藏。跑法与 `world.mjs`、`physics.mjs` 一样在 `web-preview` 下 `node test/xxx.mjs`。
-- **已知缺口**：敌人没有皮肤网格（占位体格）；主角攻击是 stand-in；还没有关卡化（出生点/出口/开门条件）。
+- **测试**：`node test/enemyglb.mjs`（14 项）验烘好的 GLB——根节点 scale 为 1、5 条 clip 齐全、每条 ≥150 条轨道、3 个网格拆成 7 个蒙皮图元共 7448 三角、rest pose 髋 1.08 m / 头 1.82 m，并且逐条播一遍确认躯干仍竖直（防「套错坐标系整个人躺倒」这类回归）。`node test/enemy.mjs`（16 项）走回退路径：骨数、占位体格高度与脚底、动作确实在驱动骨骼（手臂骨四元数与 rest pose 的夹角 > 0.05）、追击位移、20 伤存活 / 再 20 伤阵亡播 death、2.6 s 后隐藏。跑法与 `world.mjs`、`physics.mjs` 一样在 `web-preview` 下 `node test/xxx.mjs`。node 里 GLTFLoader 没有 DOM/ImageBitmap，测试先用 20 行把 GLB 的纹理解析掉再喂给它。
+- **调试参数**：`?foe=x,z` 把第一只僵尸摆到指定坐标（截图用，默认在 `SPAWNS` 里）。
+- **已知缺口**：主角攻击还是 stand-in（没有真正的挥击动画）；还没有关卡化（出生点/出口/开门条件）。
 
 ## 角色指标（龙人，实测）
 

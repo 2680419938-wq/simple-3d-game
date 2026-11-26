@@ -319,6 +319,7 @@ function startJump() {
 const ATTACK = { startup: 0.10, active: 0.12, recovery: 0.22, reach: 1.9, dot: 0.35, dmg: 20, cd: 0.45, lunge: 3.4 };
 const ATK_TOTAL = ATTACK.startup + ATTACK.active + ATTACK.recovery;
 const SPAWNS = [[4.4, 3.2], [-4.6, 2.8], [1.2, -5.4], [-3.4, -4.8], [5.8, -1.2], [-6.2, -0.6]];
+if (params.has('foe')) SPAWNS[0] = params.get('foe').split(',').map(Number);   // ?foe=x,z 截图摆位
 const enemies = [];
 let enemyAssets = null, wave = 0, waveT = 0;
 let hp = 100, hpMax = 100, hurtT = 0, downT = 0;
