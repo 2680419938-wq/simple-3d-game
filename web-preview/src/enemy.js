@@ -15,11 +15,31 @@ const SRC = {
 };
 
 const CM = 0.01;   // 裸 FBX 骨架以厘米为单位（髋高 92.5）；烘好的 GLB 已经烘进 0.01，缩放取 1
+
+// 烘出来的走路/跑步片段带着 Mixamo 的根位移：髋部一个周期前移 1.28 m（走）/ 2.30 m（跑），
+// 播到最后一帧会瞬移回起点。这里按线性斜坡把净位移扣掉（左右摆动与上下起伏都留着），
+// 顺便返回片段自己的设计地速（m/s），用来把播放速率和移动速度对齐——否则脚下一直在打滑。
+export function stripRootDrift(clip, unit) {
+  const tr = clip.tracks.find((t) => /mixamorig:?Hips.position$/.test(t.name));
+  if (!tr) return 0;
+  const v = tr.values, n = v.length / 3;
+  if (n < 2) return 0;
+  const dx = v[(n - 1) * 3] - v[0];
+  const dy = v[(n - 1) * 3 + 1] - v[1];
+  const dz = v[(n - 1) * 3 + 2] - v[2];
+  for (let i = 0; i < n; i++) {
+    const k = i / (n - 1);
+    v[i * 3] -= dx * k;
+    v[i * 3 + 1] -= dy * k;
+    v[i * 3 + 2] -= dz * k;
+  }
+  return (Math.hypot(dx, dz) * unit) / clip.duration;
+}
 const GLB = '/models/zombie/zombiegirl.glb';
 
 export const ENEMY = {
   hp: 30,
-  walkSpeed: 1.25,
+  walkSpeed: 0.90,   // 片段本身的设计地速是 0.31 m/s（走）/ 2.75 m/s（跑），播放速率按这个比例对齐
   runSpeed: 3.0,
   sight: 15,
   reach: 1.9,        // 攻击判定距离（米）
@@ -143,7 +163,9 @@ async function loadGlb() {
   for (const c of gltf.animations) clips[c.name] = c;
   for (const k in SRC) if (!clips[k]) throw new Error('glb missing clip ' + k);
   gltf.scene.updateMatrixWorld(true);
-  return { proto: gltf.scene, clips, scale: 1 };
+  // 轨道单位是厘米（髋局部平移 -107.59）；死亡片段的下坠是动作本身，不剥
+  const clipSpeed = { walk: stripRootDrift(clips.walk, CM), run: stripRootDrift(clips.run, CM) };
+  return { proto: gltf.scene, clips, clipSpeed, scale: 1 };
 }
 
 export async function loadEnemyAssets() {
@@ -164,7 +186,8 @@ export async function loadEnemyAssets() {
     attack: clipOf(attack, 'Attack'),
     death: clipOf(death, 'Death'),
   };
-  return { proto: idle, clips, scale: CM };
+  const clipSpeed = { walk: stripRootDrift(clips.walk, CM), run: stripRootDrift(clips.run, CM) };
+  return { proto: idle, clips, clipSpeed, scale: CM };
 }
 
 const _wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
@@ -183,6 +206,7 @@ export class Enemy {
       o.userData.baseEmissive = o.material.emissive ? o.material.emissive.clone() : null;
     });
     this.mixer = new THREE.AnimationMixer(this.root);
+    this.clipSpeed = assets.clipSpeed || {};
     this.actions = {};
     for (const k in assets.clips) {
       const c = assets.clips[k];
@@ -194,6 +218,7 @@ export class Enemy {
     this.cur = null;
     this.hp = ENEMY.hp;
     this.state = 'idle';
+    this.gait = 'walk';
     this.cd = 0;
     this.atkT = 0;
     this.hitDone = false;
@@ -205,17 +230,29 @@ export class Enemy {
     this.play('idle', 0);
   }
 
-  play(name, fade = 0.25, rate = 1) {
+  play(name, fade = 0.25, rate = 1, warp = false) {
     const a = this.actions[name];
     if (!a) return;
-    if (this.cur === name) { a.setEffectiveTimeScale(rate); return; }
+    const once = name === 'attack' || name === 'death';
+    if (this.cur === name) {
+      a.setEffectiveTimeScale(rate);
+      // LoopOnce 播完是 paused + 定格在末帧：重播不 reset 就整只僵尸再也不动（曾「打两下就僵住」）
+      if (once && !a.isRunning()) {
+        a.reset();
+        a.enabled = true;
+        a.setEffectiveWeight(1);
+        a.play();
+        a.setEffectiveTimeScale(rate);
+      }
+      return;
+    }
     const from = this.actions[this.cur];
     a.reset();
     a.enabled = true;
     a.setEffectiveTimeScale(rate);
     a.setEffectiveWeight(1);
     a.play();
-    if (from && from !== a) from.crossFadeTo(a, fade, false);
+    if (from && from !== a) from.crossFadeTo(a, fade, warp);
     this.cur = name;
   }
 
@@ -237,7 +274,7 @@ export class Enemy {
     this.setFlash(1);
     this.kb.set(dir.x, 0, dir.z).multiplyScalar(3.4);
     if (this.hp <= 0) { this.die(); return true; }
-    if (this.state === 'attack') this.state = 'chase';
+    if (this.state === 'attack') { this.state = 'chase'; this.play('idle', 0.1); }   // 打断挥击时别留着定格姿势
     this.stun = 0.18;
     return false;
   }
@@ -287,19 +324,30 @@ export class Enemy {
       if (this.atkT >= dur) { this.state = 'chase'; }
     } else {
       const seen = dist < ENEMY.sight;
+      const walking = this.cur === 'walk' || this.cur === 'run';
+      // 已在走就多走到 1.43 m 才停，否则站在 1.71 m 线上会 idle/walk 逐帧互切、每切一次就 reset 片段
+      const nearLine = ENEMY.reach * (walking ? 0.75 : 0.9);
       if (seen && dist <= ENEMY.reach && this.cd <= 0) {
         this.state = 'attack';
         this.atkT = 0;
         this.hitDone = false;
         this.cd = ENEMY.attackCD;
         this.play('attack', 0.12, ENEMY.attackRate);
-      } else if (seen && dist > ENEMY.reach * 0.9) {
-        const sp = dist > 6 ? ENEMY.runSpeed : ENEMY.walkSpeed;
+      } else if (seen && dist > nearLine) {
+        // 走/跑之间留 1.5 m 滞回带：正好卡在 6 m 边界上会逐帧来回切，每次都 reset 片段（看起来像走路不断重启）
+        if (dist > 7) this.gait = 'run';
+        else if (dist < 5.5) this.gait = 'walk';
+        const sp = this.gait === 'run' ? ENEMY.runSpeed : ENEMY.walkSpeed;
         p.x += (dx / dist) * sp * dt;
         p.z += (dz / dist) * sp * dt;
-        this.play(dist > 6 ? 'run' : 'walk', 0.25, 1);
+        const rate = this.clipSpeed[this.gait] ? sp / this.clipSpeed[this.gait] : 1;
+        this.play(this.gait, 0.28, rate);   // 不用 warp：它会在淡入结束把 timeScale 覆回 1，脚下又开始滑
         this.state = 'chase';
-      } else if (!seen && this.state === 'chase') {
+      } else if (seen) {
+        // 已经贴到攻击距离、只是还在冷却：站定等下一刀，别留着上一刀 LoopOnce 定格的姿势
+        this.play('idle', 0.2);
+        this.state = 'chase';
+      } else if (this.state === 'chase') {
         this.state = 'idle';
         this.play('idle', 0.3);
       }
