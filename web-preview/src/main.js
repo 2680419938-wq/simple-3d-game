@@ -9,6 +9,7 @@ import { createPostFX } from './postfx.js';
 import { createVfx } from './vfx.js';
 import { createSkills } from './skills.js';
 import { Progression, SKILL_META, SLOTS, POOL, cardText } from './progression.js';
+import { clearDistance } from './camera.js';
 import { loadEnemyAssets, Enemy, ENEMY } from './enemy.js';
 
 const ATMO_SCALE = 0.25;   // 线性空间加色约比 sRGB 亮 4 倍，0.25 与原观感对齐
@@ -28,7 +29,7 @@ scene.fog = new THREE.Fog(0x0e1116, 22, 60);
 
 const params = new URLSearchParams(location.search);
 const useForest = params.get('scene') !== 'arena';   // 默认森林场景，?scene=arena 回木箱场地
-const camera = new THREE.PerspectiveCamera(48, window.innerWidth / window.innerHeight, 0.1, 520);
+const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 520);   // 48 太窄，追尾镜头下侧后方来的僵尸完全看不见
 camera.layers.enable(1);            // layer1 = demo 技能特效（闪电/粒子/贴花都在 VFX 层）
 camera.layers.enable(2);            // layer2 = 事件特效，故意排除在光柱用的深度通道外
 
@@ -93,16 +94,35 @@ addEventListener('keydown', (e) => {
 });
 addEventListener('keyup', (e) => keys.delete(e.code));
 
+// 视角操作：点一下画面锁定鼠标，之后直接移动鼠标转视角（不用一直按左键）；ESC 解锁，解锁状态下左键拖拽也能转
 let dragging = false;
-canvas.addEventListener('pointerdown', (e) => { dragging = true; canvas.setPointerCapture(e.pointerId); });
-canvas.addEventListener('pointerup', (e) => { dragging = false; canvas.releasePointerCapture(e.pointerId); });
+let pointerLocked = false;
+const wantLock = !params.has('nolock');      // ?nolock=1 关掉指针锁定（自动化截图用）
+function look(dx, dy) {
+  rig.yaw -= dx * 0.0023;
+  rig.pitch = THREE.MathUtils.clamp(rig.pitch + dy * 0.0017, -0.22, 1.15);   // 允许略微仰视，避免只能俯视
+}
+canvas.addEventListener('pointerdown', (e) => {
+  if (pointerLocked) return;
+  dragging = true;
+  canvas.setPointerCapture(e.pointerId);
+});
+canvas.addEventListener('pointerup', (e) => {
+  dragging = false;
+  if (canvas.hasPointerCapture(e.pointerId)) canvas.releasePointerCapture(e.pointerId);
+});
 canvas.addEventListener('pointermove', (e) => {
-  if (!dragging) return;
-  rig.yaw -= e.movementX * 0.005;
-  rig.pitch = THREE.MathUtils.clamp(rig.pitch + e.movementY * 0.003, 0.02, 1.15);
+  if (pointerLocked) { look(e.movementX, e.movementY); return; }
+  if (dragging) look(e.movementX, e.movementY);
+});
+canvas.addEventListener('click', () => {
+  if (wantLock && !pointerLocked && canvas.requestPointerLock) canvas.requestPointerLock();
+});
+document.addEventListener('pointerlockchange', () => {
+  pointerLocked = document.pointerLockElement === canvas;
 });
 addEventListener('wheel', (e) => {
-  rig.dist = THREE.MathUtils.clamp(rig.dist + e.deltaY * 0.004, 2.5, 14);
+  rig.dist = THREE.MathUtils.clamp(rig.dist + e.deltaY * 0.004, 2.2, 10);
 }, { passive: true });
 
 if (location.protocol === 'file:') {
@@ -122,6 +142,7 @@ const stateEl = document.getElementById('state');
 if (params.has('yaw')) rig.yaw = parseFloat(params.get('yaw')); // __camParams
 if (params.has('pitch')) rig.pitch = parseFloat(params.get('pitch'));
 if (params.has('dist')) rig.dist = parseFloat(params.get('dist'));
+if (params.has('fov')) { camera.fov = parseFloat(params.get('fov')); camera.updateProjectionMatrix(); }   // __camParams
 const statsEl = document.getElementById('stats');
 
 let mixer = null;
@@ -538,6 +559,18 @@ const moveDir = new THREE.Vector3();
 const camPos = new THREE.Vector3();
 const desiredCam = new THREE.Vector3();
 const camBase = new THREE.Vector3();
+let camDist = null;          // 遮挡处理后的实际相机距离（null = 还没初始化）
+const _camDir = new THREE.Vector3(0, 0, 1);
+
+/** 目标点到相机方向上的可用距离（被树干/箱体挡住就截断）。 */
+function camClear(maxD) {
+  _camDir.set(
+    Math.sin(rig.yaw) * Math.cos(rig.pitch),
+    Math.sin(rig.pitch),
+    Math.cos(rig.yaw) * Math.cos(rig.pitch)
+  ).normalize();
+  return clearDistance(rig.target, _camDir, world.colliders, maxD);
+}
 const UP = new THREE.Vector3(0, 1, 0);
 const tmpQ = new THREE.Quaternion();
 let camInit = false;
@@ -558,6 +591,7 @@ function resetGame() {
   collected = 0; playTime = 0; finished = false;
   hp = hpMax; hurtT = 0; downT = 0; hurtAnimT = 0; atkT = 0; atkCD = 0; atkHit = false;
   wave = 0; waveT = 0;
+  camDist = null;                        // 重开后相机距离重新算，别带着上一局的遮挡值
   prog.reset(); prog.unlock('ice');
   cardQueue = 0; closeCards();
   for (const e of enemies) if (e.root.parent) e.root.parent.remove(e.root);
@@ -727,11 +761,16 @@ function update(dt) {
     );
   }
 
-  const dist = rig.dist + Math.min(speed, 5) * 0.32;  // pull back while running
-  const h = Math.cos(rig.pitch) * dist;
+  // 相机距离：跑动时略拉远；撞到树干/箱体立刻缩短，脱离遮挡后再慢慢推回
+  const wantDist = rig.dist + Math.min(speed, 5) * 0.32;   // 跑起来镜头略拉远
+  const targetDist = Math.max(1.35, Math.min(wantDist, camClear(wantDist)));
+  if (camDist === null) camDist = targetDist;
+  else if (targetDist < camDist) camDist = targetDist;                                   // 挡上了：立即缩，否则会穿进树干
+  else camDist += (targetDist - camDist) * Math.min(1, dt * 2.5);
+  const h = Math.cos(rig.pitch) * camDist;
   desiredCam.set(
     rig.target.x + Math.sin(rig.yaw) * h,
-    rig.target.y + Math.sin(rig.pitch) * dist,
+    Math.max(0.5, rig.target.y + Math.sin(rig.pitch) * camDist),   // 仰视时别把镜头压到地下
     rig.target.z + Math.cos(rig.yaw) * h
   );
   if (!camInit) { camBase.copy(desiredCam); camInit = true; }
