@@ -217,7 +217,8 @@ export class Enemy {
       this.actions[k] = a;
     }
     this.cur = null;
-    this.hp = ENEMY.hp;
+    this.hpMax = ENEMY.hp * (opts.hpScale || 1);   // 无限波次：越往后越肉
+    this.hp = this.hpMax;
     this.state = 'idle';
     this.gait = 'walk';
     this.cd = 0;

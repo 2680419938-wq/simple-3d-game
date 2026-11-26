@@ -39,6 +39,7 @@ class Combat {
     this.elapsed = 0;
     this.nextCastId = 1;
     this.damageScale = 1;
+    this.dmgMul = {};      // element -> 该次施放吃的伤害乘子（升级卡）
   }
 
   beginCast(ability) {
@@ -86,7 +87,7 @@ class Combat {
         this._radius(ability, profile, 'startRadius', 'startRadiusKey', 0.5),
         this._radius(ability, profile, 'endRadius', 'endRadiusKey', 0.5));
     }
-    const dmg = profile.damage * this.damageScale;
+    const dmg = profile.damage * this.damageScale * (this.dmgMul[ability.element] ?? 1);
     for (const e of hits) {
       if (profile.radial) _dir.subVectors(e.root.position, _end).setY(0);
       else _dir.copy(ability.direction).setY(0);
@@ -170,15 +171,16 @@ export function createSkills({ scene, camera, getEnemies, radiusOf = 0.5, onHit 
     setSunDir(d) { frame.uLightDir.value.copy(d).normalize(); },
     resize(w, h) { frame.uResolution.value.set(w, h); },
     cooling,
-    cast(element, origin, direction, distance = 12) {
+    setDamageMul(element, mul) { combat.dmgMul[element] = mul; },
+    cast(element, origin, direction, distance = 12, cdMul = 1) {
       if (cooling(element) > 0) return null;
-      cooldowns.set(element, settings[element]?.cooldown ?? 2);
+      cooldowns.set(element, (settings[element]?.cooldown ?? 2) * cdMul);
       const ability = manager.cast(origin, direction, distance, element);
       if (ability) noFog(ability.group);
       return ability;
     },
-    hud() {
-      return ['ice', 'thunder']
+    hud(elements = ['ice', 'thunder']) {
+      return elements
         .map((e) => e + (cooling(e) > 0 ? ' ' + cooling(e).toFixed(1) + 's' : ' 就绪'))
         .join(' · ');
     },

@@ -207,10 +207,21 @@ blender -b --python AnimLib/inspect_fbx.py -- "D:\浏览器·\xxx.fbx"
   2. 特效挂在 `LAYER.VFX`(1) 上，而 `camera.layers.enable(1)` 原来只写在 `useForest` 分支里 → 竞技场里闪电、粒子、地面贴花全部隐形。现在在 `main.js:31` 无条件打开。
   3. 所有特效材质的软边都靠 `softFade(frame.uSceneDepth, ...)`。本项目还没有打包深度的 prepass，`uSceneDepth` 为 null 时采样到 `(0,0,0,0)` → `unpackRGBAToDepth(0)=0` → 判成「被遮挡」→ alpha 恒为 0。占位贴图**必须解包出深度 1.0**：`DataTexture([255,0,0,0])` 刚好是 1.0；给 `[255,255,255,255]` 会算出 1.0039，`perspectiveDepthToViewZ` 翻成正数，软边又变成 0。
   4. 森林的 `FogExp2` 会把 10 m 外的特效洗成白色（demo 场景没有雾），所以每次 `cast` 之后对技能子树做一遍 `noFog()`。
-- **操作**：`1` 冰枪、`2` 雷枪（沿角色朝向放 12 m，冷却读 `settings[element].cooldown`）。HUD 尾部显示 `ice 就绪 · thunder 1.4s`。
-- **调试参数**：`?skill=ice|thunder` 进场自动放一次；`&skillhold=<秒>` 先按 60 Hz 手动推进到该相位再冻结（无头截图只能推进 0.4 s，靠它拍中段）；`?reach=<米>` 改距离。
-- **证据图**：`_shots/skills/CMP_skills.png`（冰枪命中 / 雷枪命中 / 森林冰枪 / 森林雷枪四格，其中两张 HUD 读 `僵尸 0 活` = 伤害真的结算了）。
-- **还没做的**：4 个技能槽、击杀升级、升级抽 3 张卡、无限波次。
+- **技能池只有四个**：`ice 冰枪 / thunder 雷枪 / beam 光柱 / phoenix 凤凰`。另外六个逐个实测过：`void` 只有一条光带；`snare / glacier / meteor` 只出地面白烟、主体几何不出现（三者的 mesh 都 `frustumCulled = false` 且在 VFX 层，所以不是裁剪或层的问题，根因还没查）——暂不进池。
+- **调试参数**：`?skill=<元素>` 进场自动放一次；`&skillhold=<秒>` 先按 60 Hz 手动推进到该相位再冻结（无头截图只能推进 0.4 s，靠它拍中段）；`?reach=<米>` 改距离；`?unlock=1` 直接填满四个槽；`?cards=2` 摆一张选卡界面；`?xp=<n>` 预置经验。
+- **证据图**：`_shots/skills/CMP_skills.png`（冰枪命中 / 雷枪命中 / 森林冰枪 / 森林雷枪四格，其中两张 HUD 读 `僵尸 0 活` = 伤害真的结算了）、`_shots/skills/pg_cards.png`（升级选卡）、`pg_slots.png`（四槽 + 光柱）。
+
+### 成长与技能槽（roguelite）
+
+割草循环：**击杀 → 升级 → 抽 3 张卡 → 技能变强 / 解锁新技能 → 无限波次的僵尸**。逻辑在 `web-preview/src/progression.js`（纯数据层，不 import three，node 能直接测），`main.js` 只做接线，选卡界面是 `index.html` 里的 `#cards` 覆盖层。
+
+- **等级**：升到下一级要 `needFor(level) = 6 + 2 × level` 个击杀（1 → 2 级 8 个），余量保留。升级时整个世界暂停（`update()` 直接 return），抽 3 张卡，按 `1 / 2 / 3` 或点鼠标选一张；一次多杀连升多级会排队，选完一张接着弹下一张。
+- **技能槽**：4 个，起手只有冰枪，其余三个靠解锁卡。`1–4` 对应槽位，HUD 尾部显示 `ice 就绪 · thunder 1.4s`。
+- **卡池**：解锁（**有空槽时必出至少一张**，否则技能永远凑不满）/ 单体伤害 +25% / 单体冷却 ×0.85 / 全体伤害 +12% / 全体冷却 ×0.90。满槽后不再出解锁卡，且**保证至少一张伤害卡**（避免连续抽到只有冷却的牌）。冷却乘子有下限 `CARD.minCooldown = 0.35`。
+- **乘子怎么生效**：伤害乘子在 `cast()` 那一刻写进 `combat.dmgMul[element]`（`skills.js`），所以已经在飞的技能不会被之后的卡强化；冷却乘子直接乘在 `settings[element].cooldown` 上。
+- **无限波次**：`spawnWave()` 每波 `min(2 + wave, 8)` 只、血量 `× (1 + 0.22 × (wave - 1))`（`enemy.js` 构造参数 `hpScale`），清场 2.2 s 后刷下一波——原来「最多 3 波」的上限已去掉。按 R 重开会连成长一起重置。
+- **测试**：`node test/progression.mjs` 17 项全 PASS（升级余量、有空槽必出解锁卡、满槽不出解锁卡且必有伤害卡、乘子叠加与下限、卡面文案）；原有 world 11 / physics 5 / enemy 24 / enemyglb 18 不变。
+- **还没做的**：数值平衡（现在僵尸 30 HP、冰枪 80 伤，一张卡就秒）、更多卡种（范围 / 暴击 / 吸血 / 移速）、死亡结算（现在 HP 归零只是原地重生 1.4 s）。
 
 ## 角色指标（龙人，实测）
 

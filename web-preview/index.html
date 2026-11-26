@@ -16,6 +16,16 @@
   #game.win{color:#8dffa8;font-size:18px}
   #vig{position:fixed;inset:0;pointer-events:none;background:radial-gradient(ellipse at 50% 46%, rgba(0,0,0,0) 42%, rgba(8,12,16,0.34) 100%)}
   #flash{position:fixed;inset:0;pointer-events:none;opacity:0;mix-blend-mode:screen}
+
+  #cards{position:fixed;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;gap:20px;background:rgba(6,10,16,.62);z-index:20}
+  #cards.show{display:flex}
+  #cardtag{font-size:13px;letter-spacing:2px;color:#9fe6ff;text-shadow:0 1px 4px #000}
+  #cardrow{display:flex;gap:14px}
+  #cards .card{position:relative;width:210px;min-height:158px;padding:16px 14px;border-radius:10px;border:1px solid #3a4a60;background:linear-gradient(160deg,rgba(28,40,58,.96),rgba(14,20,30,.96));color:#dfe9f5;font:inherit;text-align:left;cursor:pointer;display:flex;flex-direction:column;gap:8px;transition:transform .12s,border-color .12s,box-shadow .12s}
+  #cards .card:hover{transform:translateY(-3px);border-color:#5fd0ff;box-shadow:0 0 18px rgba(95,208,255,.35)}
+  #cards .card b{font-size:15px;color:#fff}
+  #cards .card i{font-style:normal;font-size:12px;line-height:1.5;color:#9fb2c8}
+  #cards .card .n{position:absolute;right:11px;top:9px;font-size:11px;color:#6d819b}
   #dbg{position:fixed;left:12px;bottom:10px;font-size:12px;line-height:1.45;color:#7fd4ff;white-space:pre;text-shadow:0 1px 3px #000;pointer-events:none;opacity:.9}
 </style>
 </head>
@@ -24,7 +34,7 @@
 <div id="hud">
   <b>简单3d游戏 · <span id="lodname">LOD0</span></b><br />
   <span class="k" id="cliplist"></span><br />
-  <span class="k">WASD 移动 · 鼠标左键拖拽转视角 · 滚轮缩放 · J 挥击 · 1 冰枪 · 2 雷枪</span><br />
+  <span class="k">WASD 移动 · 鼠标左键拖拽转视角 · 滚轮缩放 · J 挥击 · 1–4 技能（升级解锁） · 升级时 1/2/3 选卡</span><br />
   <span class="k" id="state"></span>
 </div>
 <div id="stats"></div>
@@ -32,6 +42,7 @@
 <div id="dbg"></div>
 <div id="vig"></div>
 <div id="flash"></div>
+<div id="cards"><div id="cardtag"></div><div id="cardrow"></div></div>
 <div id="loading">loading model …</div>
 <script>
   // Runs before the module script: under file:// the ES module is blocked by CORS,

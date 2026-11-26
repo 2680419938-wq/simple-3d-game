@@ -8,6 +8,7 @@ import { addAtmo } from './atmo.js';
 import { createPostFX } from './postfx.js';
 import { createVfx } from './vfx.js';
 import { createSkills } from './skills.js';
+import { Progression, SKILL_META, SLOTS, cardText } from './progression.js';
 import { loadEnemyAssets, Enemy, ENEMY } from './enemy.js';
 
 const ATMO_SCALE = 0.25;   // 线性空间加色约比 sRGB 亮 4 倍，0.25 与原观感对齐
@@ -340,6 +341,67 @@ let enemyAssets = null, wave = 0, waveT = 0;
 let hp = 100, hpMax = 100, hurtT = 0, downT = 0, hurtAnimT = 0;
 let atkT = 0, atkHit = false, atkCD = 0, atkTotal = 0;   // atkTotal = 本次挥击总时长（有片段用片段长，?noatk 用旧版 0.44 s）
 
+// ---- 成长：等级 / 4 个技能槽 / 升级抽卡 ----
+const prog = new Progression();
+prog.unlock('ice');                    // 起手只有冰枪，其余三个靠升级卡解锁
+let cardQueue = 0;                     // 待选的卡数（一次多杀可能连升数级）
+let cardOpen = false;
+let cardChoices = [];
+const cardsEl = document.getElementById('cards');
+const cardRowEl = document.getElementById('cardrow');
+const cardTagEl = document.getElementById('cardtag');
+
+function openCards() {
+  if (cardQueue <= 0) return;
+  cardOpen = true;
+  cardChoices = prog.rollCards(3);
+  if (!cardsEl) return;
+  cardsEl.classList.add('show');
+  if (cardTagEl) cardTagEl.textContent = 'LEVEL ' + prog.level + '　·　选一张（按 1 / 2 / 3）';
+  cardRowEl.innerHTML = '';
+  cardChoices.forEach((card, i) => {
+    const { title, desc } = cardText(card);
+    const b = document.createElement('button');
+    b.className = 'card';
+    b.innerHTML = '<span class="n">' + (i + 1) + '</span><b>' + title + '</b><i>' + desc + '</i>';
+    b.addEventListener('click', () => chooseCard(i));
+    cardRowEl.appendChild(b);
+  });
+}
+
+function chooseCard(i) {
+  if (!cardOpen) return;
+  const card = cardChoices[i];
+  if (!card) return;
+  prog.apply(card);
+  cardQueue = Math.max(0, cardQueue - 1);
+  cardOpen = false;
+  if (cardsEl) cardsEl.classList.remove('show');
+  if (cardQueue > 0) openCards();
+}
+
+function closeCards() {
+  cardOpen = false;
+  if (cardsEl) cardsEl.classList.remove('show');
+}
+
+function gainXp(kills = 1) {
+  if (kills <= 0) return;
+  const ups = prog.addKill(kills);
+  if (ups > 0) { cardQueue += ups; if (!cardOpen) openCards(); }
+}
+
+const slotElements = () => prog.slots.map((s) => (s ? s.element : null));
+
+if (params.has('unlock')) {              // ?unlock=1 直接填满 4 槽，供无头截图看技能栏
+  for (const el of Object.keys(SKILL_META)) prog.unlock(el);
+}
+if (params.has('xp')) { prog.xp = parseInt(params.get('xp'), 10) || 0; }
+if (params.has('cards')) {               // ?cards=2 直接摆一张选卡界面，供无头截图
+  cardQueue = Math.max(1, parseInt(params.get('cards'), 10) || 1);
+  openCards();
+}
+
 // ---- 技能（demo 的 VFX 管线）：命中结算直接扣僵尸血 ----
 const skills = createSkills({
   scene, camera,
@@ -347,27 +409,35 @@ const skills = createSkills({
   radiusOf: ENEMY.radius,
   onHit: (e, killed, element) => {
     vfx.landing(e.root.position.x, e.root.position.y, e.root.position.z, killed ? 1.2 : 0.55);
+    if (killed) gainXp(1);
   },
 });
 skills.resize(window.innerWidth, window.innerHeight);
 let skillFrozen = false;
 
 function castSkill(element, force = false) {
-  if (!model) return null;
+  if (!model || cardOpen) return null;
   if (!force && (!grounded || crouched || downT > 0 || hurtAnimT > 0)) return null;
   const dir = new THREE.Vector3(Math.sin(modelYaw), 0, Math.cos(modelYaw));
   const dist = params.has('reach') ? parseFloat(params.get('reach')) : 12;
-  const a = skills.cast(element, model.position, dir, dist);
+  skills.setDamageMul(element, prog.damageMul(element));
+  const a = skills.cast(element, model.position, dir, dist, prog.cooldownMul(element));
   if (a) dbg('cast ' + element + ' ' + dist + 'm');
   return a;
 }
 
+function castSlot(i, force = false) {
+  const el = slotElements()[i];
+  return el ? castSkill(el, force) : null;
+}
+
 function spawnWave() {
   if (!enemyAssets) return;
-  const n = Math.min(1 + wave, 4);
+  const n = Math.min(2 + wave, 8);                       // 无限波：每波多一只，最多 8 只同屏
+  const hpScale = 1 + 0.22 * (wave - 1);                  // 每波血量 +22%
   for (let i = 0; i < n; i++) {
     const [sx, sz] = SPAWNS[(wave * 2 + i) % SPAWNS.length];
-    const e = new Enemy(enemyAssets, { x: sx, y: world.groundAt(sx, sz, 3), z: sz });
+    const e = new Enemy(enemyAssets, { x: sx, y: world.groundAt(sx, sz, 3), z: sz, hpScale });
     scene.add(e.root);
     enemies.push(e);
   }
@@ -409,6 +479,7 @@ function attackHit() {
     if ((dx * fx + dz * fz) / (d || 1) < ATTACK.dot) continue;   // 只打正面 ±70°
     const killed = e.hurt(ATTACK.dmg, { x: fx, z: fz });
     vfx.landing(e.root.position.x, e.root.position.y, e.root.position.z, killed ? 1.1 : 0.6);
+    if (killed) gainXp(1);
   }
 }
 
@@ -466,6 +537,8 @@ function resetGame() {
   collected = 0; playTime = 0; finished = false;
   hp = hpMax; hurtT = 0; downT = 0; hurtAnimT = 0; atkT = 0; atkCD = 0; atkHit = false;
   wave = 0; waveT = 0;
+  prog.reset(); prog.unlock('ice');
+  cardQueue = 0; closeCards();
   for (const e of enemies) if (e.root.parent) e.root.parent.remove(e.root);
   enemies.length = 0;
   spawnWave();
@@ -475,12 +548,21 @@ function resetGame() {
 addEventListener('keydown', (e) => {
   if (e.code === 'KeyR') resetGame();
   if (e.code === 'KeyC' && (actions.crouch || actions.crouchwalk) && grounded) crouched = !crouched;
+  if (cardOpen) {                        // 选卡时数字键选牌，其它操作一律锁住
+    if (e.code === 'Digit1' || e.code === 'Numpad1') chooseCard(0);
+    else if (e.code === 'Digit2' || e.code === 'Numpad2') chooseCard(1);
+    else if (e.code === 'Digit3' || e.code === 'Numpad3') chooseCard(2);
+    return;
+  }
   if (e.code === 'KeyJ') startAttack();
-  if (e.code === 'Digit1') castSkill('ice');
-  if (e.code === 'Digit2') castSkill('thunder');
+  if (e.code === 'Digit1') castSlot(0);
+  if (e.code === 'Digit2') castSlot(1);
+  if (e.code === 'Digit3') castSlot(2);
+  if (e.code === 'Digit4') castSlot(3);
 });
 
 function update(dt) {
+  if (cardOpen) return;                  // 选卡时整个世界暂停
   // movement is camera relative; W pushes away from the camera
   forward.set(-Math.sin(rig.yaw), 0, -Math.cos(rig.yaw)).normalize();
   right.crossVectors(forward, UP).normalize();   // forward x up = 屏幕右方（UP x forward 得到左方，A/D 会反）
@@ -590,7 +672,7 @@ function update(dt) {
       }
       if (enemies.every((e) => !e.alive)) {
         waveT += dt;
-        if (waveT > 2.8 && wave < 3) {     // 清场 2.8 s 后下一波，最多 3 波
+        if (waveT > 2.2) {                 // 无限波：清场 2.2 s 后刷下一波
           waveT = 0;
           for (const e of enemies) if (e.root.parent) e.root.parent.remove(e.root);
           enemies.length = 0;
@@ -613,7 +695,7 @@ function update(dt) {
       const head = downT > 0 ? '被击倒 · 重生中' : `HP ${Math.round(hp)} / ${hpMax}`;
       gameEl.textContent = finished
         ? `通关！${playTime.toFixed(1)} s · 按 R 重开`
-        : `${head} · 僵尸 ${alive} · 第 ${Math.max(1, Math.min(wave, 3))} 波 · 收集 ${collected} / ${world.total} · ${playTime.toFixed(1)} s`;
+        : `${head} · Lv ${prog.level} ${prog.xp}/${prog.need} · 僵尸 ${alive} · 第 ${Math.max(1, wave)} 波 · 收集 ${collected} / ${world.total} · ${playTime.toFixed(1)} s`;
       gameEl.classList.toggle('win', finished);
     }
     rig.target.lerp(
@@ -704,7 +786,7 @@ function update(dt) {
       `pos ${model.position.x.toFixed(1)}, ${model.position.z.toFixed(1)} · y ${py.toFixed(2)} · speed ${speed.toFixed(1)} m/s · clip ${(jumpT > 0 ? 'jump' : want).toUpperCase()}${grounded ? '' : ' · 空中'}` +
       (params.has('atk') ? ` · cur ${curAnim} · atkT ${atkT.toFixed(2)} · hit ${atkHit ? 1 : 0}` : '') +
       ((params.has('atk') || params.has('skill')) ? ` · 僵尸 ${enemies.filter((e) => e.alive).length} 活` : '') +
-      ` · ${skills.hud()}`;
+      ` · ${skills.hud(slotElements().filter(Boolean))}`;
   }
 }
 
