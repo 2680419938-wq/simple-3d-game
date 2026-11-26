@@ -227,8 +227,12 @@ new GLTFLoader().load(glbUrl, (gltf) => {
   // 原片 1..43 帧几乎不动（两脚位移 < 3 cm），真正的迈步在 49..73 帧；只取这一段当循环
   clips.crouchwalk = cwRaw || null;   // Crouched Walking：26 帧 1.04 s，首末帧完全一致（seam 0.001）可直循环
   clips.crouch = cwRaw ? THREE.AnimationUtils.subclip(cwRaw, 'CrouchIdle', 1, 2, 24) : clips.crouch;   // 蹲待机 = 同一动作的第 1 帧姿态（双脚并拢）
+  // 攻击：源片 2.67 s 里前 10 帧只是僵尸的起手站姿，取 10..40 帧（挥爪 + 扑咬），1.25 s
+  const atkRaw = byName('Attack');
+  clips.attack = atkRaw ? THREE.AnimationUtils.subclip(atkRaw, 'Attack', 10, 40, 24) : null;
+  if (clips.attack) ATK_TOTAL = clips.attack.duration / ATK_RATE;
   if (clips.idle) { actions.idle = mixer.clipAction(clips.idle); actions.idle.play(); }
-  for (const k of ['walk', 'run', 'jump', 'crouch', 'crouchwalk']) {
+  for (const k of ['walk', 'run', 'jump', 'crouch', 'crouchwalk', 'attack']) {
     if (!clips[k]) continue;
     actions[k] = mixer.clipAction(clips[k]);
     actions[k].play();
@@ -246,7 +250,7 @@ new GLTFLoader().load(glbUrl, (gltf) => {
     const k = (want && actions[want]) ? want
       : actions.walk ? 'walk' : actions.idle ? 'idle' : actions.run ? 'run' : null;
     if (!k) { console.warn('no clip to freeze'); }
-    for (const n of ['idle', 'walk', 'run', 'jump']) {
+    for (const n of ['idle', 'walk', 'run', 'jump', 'attack']) {
       if (!actions[n]) continue;
       actions[n].stop();
       actions[n].enabled = false;
@@ -316,14 +320,16 @@ function startJump() {
 }
 
 // ---- 战斗：玩家挥击 + 僵尸（动作是 public/models/zombie 下的 Mixamo FBX，占位体格）----
-const ATTACK = { startup: 0.10, active: 0.12, recovery: 0.22, reach: 1.9, dot: 0.35, dmg: 20, cd: 0.45, lunge: 3.4 };
-const ATK_TOTAL = ATTACK.startup + ATTACK.active + ATTACK.recovery;
+// startup = 挥爪真正伸出去那一刻（源片 F24，裁剪后 0.58 s ÷ 1.45 倍速）
+const ATTACK = { startup: 0.40, active: 0.22, recovery: 0.27, reach: 1.9, dot: 0.35, dmg: 20, cd: 0.30, lunge: 2.2 };
+const ATK_RATE = 1.45;
+let ATK_TOTAL = ATTACK.startup + ATTACK.active + ATTACK.recovery;
 const SPAWNS = [[4.4, 3.2], [-4.6, 2.8], [1.2, -5.4], [-3.4, -4.8], [5.8, -1.2], [-6.2, -0.6]];
 if (params.has('foe')) SPAWNS[0] = params.get('foe').split(',').map(Number);   // ?foe=x,z 截图摆位
 const enemies = [];
 let enemyAssets = null, wave = 0, waveT = 0;
 let hp = 100, hpMax = 100, hurtT = 0, downT = 0;
-let atkT = 0, atkHit = false, atkCD = 0;
+let atkT = 0, atkHit = false, atkCD = 0, atkTotal = 0;   // atkTotal = 本次挥击总时长（有片段用片段长，?noatk 用旧版 0.44 s）
 
 function spawnWave() {
   if (!enemyAssets) return;
@@ -343,10 +349,22 @@ loadEnemyAssets()
 
 function startAttack() {
   if (!model || atkT > 0 || atkCD > 0 || !grounded || crouched || downT > 0) return;
-  atkT = ATK_TOTAL;
+  const a = params.has('noatk') ? null : actions.attack;   // ?noatk=1 退回旧版「无片段 + 弧光」，用于前后对照
+  atkTotal = a ? ATK_TOTAL : 0.44;
+  atkT = atkTotal;
   atkHit = false;
   atkCD = ATTACK.cd;
-  vfx.slash(model.position.x, py, model.position.z, modelYaw);
+  if (!a) return;     // 旧版路径：只靠 update() 里的前冲 + 弧光
+  a.reset();
+  a.setLoop(THREE.LoopOnce, 1);
+  a.clampWhenFinished = true;
+  a.enabled = true;
+  a.setEffectiveTimeScale(ATK_RATE);
+  a.setEffectiveWeight(1);
+  a.play();
+  const from = actions[curAnim];
+  if (from && from !== a) from.crossFadeTo(a, 0.08, false);
+  curAnim = 'attack';
 }
 
 function attackHit() {
@@ -435,10 +453,12 @@ function update(dt) {
     : (!moving ? 'idle' : running ? 'run' : 'walk');
   if (!actions[want]) want = moving ? 'walk' : 'idle';
   if (!actions[want]) want = 'idle';
-  if (jumpT > 0) {
+  if (atkT > 0) {
+    // 挥击片段独占权重，locomotion 等它播完再接管（结束那一帧由 setAnim 交叉淡出）
+  } else if (jumpT > 0) {
     jumpT = Math.max(0, jumpT - dt);
     if (jumpT === 0) { curAnim = 'jump'; setAnim(want); }
-  } else setAnim(want, crouched && (want === 'crouch' || want === 'crouchwalk') ? 0.12 : 0.25);
+  } else setAnim(want, curAnim === 'attack' ? 0.18 : crouched && (want === 'crouch' || want === 'crouchwalk') ? 0.12 : 0.25);
   // 落地即刻切回跑/走，不等跳跃片段的收尾 0.4 s 播完
   if (!wasGrounded && grounded && jumpT > 0.02) { jumpT = 0; curAnim = 'jump'; setAnim(want, 0.18); }
   wasGrounded = grounded;
@@ -483,14 +503,26 @@ function update(dt) {
     if (hurtT > 0) hurtT -= dt;
     if (downT > 0) downT -= dt;
     if (atkT > 0) {
-      atkT -= dt;
-      const el = ATK_TOTAL - atkT;
-      if (el < ATTACK.startup + ATTACK.active) {
+      atkT = Math.max(0, atkT - dt);
+      const el = atkTotal - atkT;
+      // 前冲相位；贴到僵尸身上就停住，别冲进去穿模（角色与僵尸之间没有碰撞体）
+      let lungeOk = el < ATTACK.startup + ATTACK.active;
+      if (lungeOk) {
+        for (const e of enemies) {
+          if (!e.alive) continue;
+          if (Math.hypot(e.root.position.x - model.position.x, e.root.position.z - model.position.z) < ENEMY.radius + PLAYER_R + 0.05) { lungeOk = false; break; }
+        }
+      }
+      if (lungeOk) {
         model.position.x += Math.sin(modelYaw) * ATTACK.lunge * dt;
         model.position.z += Math.cos(modelYaw) * ATTACK.lunge * dt;
         world.resolve(model.position, PLAYER_R, py);
       }
-      if (!atkHit && el >= ATTACK.startup) { atkHit = true; attackHit(); }
+      if (!atkHit && el >= ATTACK.startup) {
+        atkHit = true;
+        vfx.slash(model.position.x, py, model.position.z, modelYaw);   // 弧光对齐爪子伸出的那一帧
+        attackHit();
+      }
     }
 
     if (enemies.length) {
@@ -567,6 +599,9 @@ function update(dt) {
       if (atmo) atmo.setSunDir(d);
     }
   }
+  if (params.has('atk') && model && enemies.length && grounded) {   // ?atk=1 自动连挥，配合 HUD 读数验证状态机
+    if (atkT <= 0 && atkCD <= 0) startAttack();
+  }
   if (fxDemo && model) {
     const fire = () => {
       const p = model.position;
@@ -596,7 +631,8 @@ function update(dt) {
 
   if (model && stateEl) {
     stateEl.textContent =
-      `pos ${model.position.x.toFixed(1)}, ${model.position.z.toFixed(1)} · y ${py.toFixed(2)} · speed ${speed.toFixed(1)} m/s · clip ${(jumpT > 0 ? 'jump' : want).toUpperCase()}${grounded ? '' : ' · 空中'}`;
+      `pos ${model.position.x.toFixed(1)}, ${model.position.z.toFixed(1)} · y ${py.toFixed(2)} · speed ${speed.toFixed(1)} m/s · clip ${(jumpT > 0 ? 'jump' : want).toUpperCase()}${grounded ? '' : ' · 空中'}` +
+      (params.has('atk') ? ` · cur ${curAnim} · atkT ${atkT.toFixed(2)} · hit ${atkHit ? 1 : 0} · 僵尸 ${enemies.filter((e) => e.alive).length}` : '');
   }
 }
 

@@ -223,8 +223,8 @@ export class Enemy {
     this.root.traverse((o) => {
       if (!o.isMesh || !o.material || !o.material.emissive) return;
       const base = o.userData.baseEmissive || new THREE.Color(0, 0, 0);
-      o.material.emissive.setRGB(base.r + 0.7 * v, base.g + 0.08 * v, base.b + 0.03 * v);
-      o.material.emissiveIntensity = 1 + 1.6 * v;
+      o.material.emissive.setRGB(base.r + 0.34 * v, base.g + 0.05 * v, base.b + 0.02 * v);   // 真贴图下 0.7 会整只过曝成橙色
+      o.material.emissiveIntensity = 1 + 0.8 * v;
     });
   }
 
@@ -257,7 +257,7 @@ export class Enemy {
 
   update(dt, target, groundAt, resolve) {
     this.mixer.update(dt);
-    if (this.flash > 0) { this.flash = Math.max(0, this.flash - dt * 4); this.setFlash(this.flash); }
+    if (this.flash > 0) { this.flash = Math.max(0, this.flash - dt * 6); this.setFlash(this.flash); }
 
     const p = this.root.position;
     if (!this.alive) {

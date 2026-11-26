@@ -167,12 +167,21 @@ blender -b --python AnimLib/inspect_fbx.py -- "D:\浏览器·\xxx.fbx"
 - **运行期加载**：`loadEnemyAssets()` 先读 GLB（`assets.scale = 1`，0.01 已经烘在 Armature 节点上）；读失败则退回旧路——无蒙皮 FBX 骨架 + `buildPuppet()` 用贴在骨段上的盒子拼的占位体格（`assets.scale = 0.01`）。指骨没有动作轨道，会保持绑定姿势。
 - **为什么能直接用**：`three/addons/loaders/FBXLoader.js` 能读这些 FBX（37 根 `mixamorig` 骨，`obj.animations` 里就是动作），所以不需要 Blender 转 GLB。注意骨架单位是**厘米**（髋高 92.555），实例要整体 ×0.01；模型自身朝 +Z（左脚步在 +X 侧）。
 - **数值**（`enemy.js` 的 `ENEMY`）：30 HP、走 1.25 m/s、跑 3.0 m/s、视野 15 m、攻击距离 1.9 m、12 伤、攻击冷却 1.6 s、死亡 2.6 s 后隐藏。僵尸攻击片段 2.62 s 太长，用 2× 速播到 1.31 s。
-- **玩家挥击**：`J` 键，`startup 0.10 / active 0.12 / recovery 0.22` 三段；命中在 startup 结束那一帧判一次（前伸 1.9 m + 敌人半径、只打正面朝向点积 ≥ 0.35 即 ±70°），前冲 3.4 m/s 带碰撞；命中 20 伤、冷却 0.45 s。主角**还没有真正的攻击动画**，现在靠前冲 + 身前那道斜向弧光（`vfx.slash`）撑读感。
+- **玩家攻击**：`J` 键。动作是 Mixamo「zombie attack」重定向到异形 CC 骨架上的一段真片段（源片 2.67 s，取第 10–40 帧 = 1.25 s，播放 1.45 倍速 → 0.86 s），不再是「只有弧光的前冲」：
+  ```bash
+  blender -b --python AnimLib/alien_clip_add.py -- --fbx 'AnimSource/zombie_pack/zombie attack.fbx' \
+          --name Attack --src dragon-man-final/Alien_Walk_Jump_2k.glb --out <out.glb> --inplace
+  ```
+  时间轴按片段自己的节奏对齐：源片第 24 帧（裁剪后 0.58 s ÷ 1.45 = **0.40 s**）是爪子真正伸出去的那一刻 → `startup 0.40 / active 0.22 / recovery 0.27`，命中判定与身前那道斜向弧光（`vfx.slash`）都在这一刻触发。前冲 2.2 m/s 只跑 startup+active 两段，且**贴到僵尸身上就停**（角色与僵尸之间没有碰撞体，否则会冲进去穿模）。
+  命中范围：前伸 1.9 m + 敌人半径、只打正面朝向点积 ≥ 0.35（±70°）；20 伤、冷却 0.30 s。攻击期间 locomotion 让出权重（`if (atkT > 0)` 跳过 `setAnim`），片段播完由 `setAnim(want, 0.18)` 混回走/跑/站。
+- **为什么要裁帧 + 变速**：僵尸的整段攻击是「站着发抖 → 后仰 → 前扑咬」2.67 s，直接播会拖到没法打。裁掉前 10 帧的僵尸站姿，再用 1.45 倍速压到 0.86 s，前扑与挥爪都还在，起手不拖。
 - **受击与波次**：玩家 100 HP，被打 12 点、0.6 s 无敌帧、归零回原点满血；一波清空 2.8 s 后刷下一波，最多 3 波（1/2/3/4 只）。
 - **HUD**：游戏行变成 `HP 100 / 100 · 僵尸 1 · 第 1 波 · 收集 0 / 12 · 0.4 s`，被击倒时显示「被击倒 · 重生中」。
 - **测试**：`node test/enemyglb.mjs`（14 项）验烘好的 GLB——根节点 scale 为 1、5 条 clip 齐全、每条 ≥150 条轨道、3 个网格拆成 7 个蒙皮图元共 7448 三角、rest pose 髋 1.08 m / 头 1.82 m，并且逐条播一遍确认躯干仍竖直（防「套错坐标系整个人躺倒」这类回归）。`node test/enemy.mjs`（16 项）走回退路径：骨数、占位体格高度与脚底、动作确实在驱动骨骼（手臂骨四元数与 rest pose 的夹角 > 0.05）、追击位移、20 伤存活 / 再 20 伤阵亡播 death、2.6 s 后隐藏。跑法与 `world.mjs`、`physics.mjs` 一样在 `web-preview` 下 `node test/xxx.mjs`。node 里 GLTFLoader 没有 DOM/ImageBitmap，测试先用 20 行把 GLB 的纹理解析掉再喂给它。
-- **调试参数**：`?foe=x,z` 把第一只僵尸摆到指定坐标（截图用，默认在 `SPAWNS` 里）。
-- **已知缺口**：主角攻击还是 stand-in（没有真正的挥击动画）；还没有关卡化（出生点/出口/开门条件）。
+- **调试参数**：`?foe=x,z` 把第一只僵尸摆到指定坐标（截图用，默认在 `SPAWNS` 里）；`?atk=1` 自动连挥（HUD 额外显示 `cur / atkT / hit / 僵尸数`，用来验状态机）；`?noatk=1` 退回旧版「无片段，只有弧光 + 前冲」，专门拍前后对照。
+- **贴图与过曝**：真贴图下敌人的受击闪白会整只过曝成橙色，`setFlash` 的 emissive 增量从 0.7 收到 0.34、强度从 1.6 收到 0.8、衰减从 4/s 提到 6/s（0.17 s），现在只是「亮一下」。
+- **已知缺口**：主角借的是僵尸的扑咬动作（风格上偏「兽性前扑」而不是兵器或拳脚，等 Mixamo 下了正经的 Punching / Slash 再换，管线只需换 `--fbx` 与裁剪帧号）；还没有关卡化（出生点/出口/开门条件）。
+- **证据图**：`_shots/combat/CMP_attack.png`（上排旧 vs 新同机位，下排 4 个关键帧）、`_shots/combat/CMP_zombie.png`（占位体格 vs 真蒙皮网格）。
 
 ## 角色指标（龙人，实测）
 
