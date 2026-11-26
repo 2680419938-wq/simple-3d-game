@@ -197,6 +197,21 @@ blender -b --python AnimLib/inspect_fbx.py -- "D:\浏览器·\xxx.fbx"
 - **已知缺口**：主角借的是变异体的勾拳——手臂在胸前横扫、不是直线刺出，从正前方看会读成「双爪抱在胸前」，从追尾镜头看是「爪子扫过身前」；换更直的动作只需换 `--fbx` 与裁剪帧号。还没有关卡化（出生点/出口/开门条件）。
 - **证据图**：`_shots/combat/CMP_hurt.png`（起手 / 头后甩 / 上身后仰 / 与僵尸同框四格）、`_shots/combat/CMP_attack.png`（上排旧 vs 新同机位，下排 4 个关键帧）、`_shots/combat/CMP_zombie.png`（占位体格 vs 真蒙皮网格）。
 
+### 技能特效（demo 移植）
+
+技能视觉来自 [ThreeJSVFX-Demo](https://github.com/mohamedachrefelouafi)（MIT，见「许可与署名」）：33 个文件整块复制到 `web-preview/src/fx/`，并保持 demo 的相对目录层级，所以 import 路径一行都不用改。只搬了管线需要的部分（`abilities/` 10 个技能 + `materials/` 10 个材质 + `particles/` + `effects/` + `core/` + `gameplay/abilityProfiles.js`），demo 的 App / 编辑器 / 世界没有搬。
+
+- **接线**：`web-preview/src/skills.js` 装配 demo 每个技能都要的共享服务（`ParticleEngine / LightPool / DecalSystem / FissureSystem / BurstSystem / CameraShake / ScreenFlash`），适配层 `Combat` 照抄 demo 的 `beginCast / onAbilityImpact / updateAbility / endCast` 语义，只把命中查询从 demo 的 EnemyManager 换成我们的僵尸数组（`_sphere` 与「点到线段距离 + 半径按 t 插值」的 `_line`），扣血走 `enemy.hurt()`。伤害取自 `fx/gameplay/abilityProfiles.js`：冰枪 80 / 雷枪 75，都是线形命中。
+- **四个必须踩的坑**（缺一个效果就不出现）：
+  1. `environment.registerShadowCasterWithPatch()` **不能是空实现**。demo 的 Environment 里它只做一件事——把补丁串到材质的 `onBeforeCompile` 上。我们一开始传了 no-op，结果 `createIceMaterial` 的整段补丁（体色、裂纹、边缘辉光、透明）全被丢掉，晶体渲染成不透明白塑料。现在按 demo 的 `patchOnBeforeCompile` 链式挂载，并给每个材质一个唯一的 `customProgramCacheKey`（three 默认用 `onBeforeCompile.toString()` 当键，两个闭包源码相同就会被合并成同一个程序）。
+  2. 特效挂在 `LAYER.VFX`(1) 上，而 `camera.layers.enable(1)` 原来只写在 `useForest` 分支里 → 竞技场里闪电、粒子、地面贴花全部隐形。现在在 `main.js:31` 无条件打开。
+  3. 所有特效材质的软边都靠 `softFade(frame.uSceneDepth, ...)`。本项目还没有打包深度的 prepass，`uSceneDepth` 为 null 时采样到 `(0,0,0,0)` → `unpackRGBAToDepth(0)=0` → 判成「被遮挡」→ alpha 恒为 0。占位贴图**必须解包出深度 1.0**：`DataTexture([255,0,0,0])` 刚好是 1.0；给 `[255,255,255,255]` 会算出 1.0039，`perspectiveDepthToViewZ` 翻成正数，软边又变成 0。
+  4. 森林的 `FogExp2` 会把 10 m 外的特效洗成白色（demo 场景没有雾），所以每次 `cast` 之后对技能子树做一遍 `noFog()`。
+- **操作**：`1` 冰枪、`2` 雷枪（沿角色朝向放 12 m，冷却读 `settings[element].cooldown`）。HUD 尾部显示 `ice 就绪 · thunder 1.4s`。
+- **调试参数**：`?skill=ice|thunder` 进场自动放一次；`&skillhold=<秒>` 先按 60 Hz 手动推进到该相位再冻结（无头截图只能推进 0.4 s，靠它拍中段）；`?reach=<米>` 改距离。
+- **证据图**：`_shots/skills/CMP_skills.png`（冰枪命中 / 雷枪命中 / 森林冰枪 / 森林雷枪四格，其中两张 HUD 读 `僵尸 0 活` = 伤害真的结算了）。
+- **还没做的**：4 个技能槽、击杀升级、升级抽 3 张卡、无限波次。
+
 ## 角色指标（龙人，实测）
 
 - 身高 2.010 m，脚底 y=0，轴心在双脚踝中点；面向 +Z，Y-up，1 单位 = 1 米
@@ -218,5 +233,6 @@ blender -b --python AnimLib/inspect_fbx.py -- "D:\浏览器·\xxx.fbx"
   （署名 + 非商用）。出处：https://sketchfab.com/3d-models/character-alien-3d-model-by-oscar-creativo-d25e65efd50c4ba691e1d5dfa1551ccc
   本项目对该素材做了贴图降采样（4096→2048 WebP）与 GLB 重导出，**未减面**。
 - **龙人（历史资产）**：*Dragon men Character for game* by ohmmi5955，CC-BY 4.0。
+- **技能特效**：*ThreeJSVFX-Demo* by **mohamedachrefelouafi**，授权 **MIT**（许可原文见 `web-preview/src/fx/LICENSE`）。`web-preview/src/fx/` 是该项目 `src/` 的部分文件逐字复制，本项目新增的只有接线层 `web-preview/src/skills.js`。
 
 使用本项目时请保留以上两行署名。

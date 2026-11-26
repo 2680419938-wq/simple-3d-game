@@ -7,6 +7,7 @@ import { setupForestLook, loadForest } from './forest.js';
 import { addAtmo } from './atmo.js';
 import { createPostFX } from './postfx.js';
 import { createVfx } from './vfx.js';
+import { createSkills } from './skills.js';
 import { loadEnemyAssets, Enemy, ENEMY } from './enemy.js';
 
 const ATMO_SCALE = 0.25;   // 线性空间加色约比 sRGB 亮 4 倍，0.25 与原观感对齐
@@ -27,6 +28,7 @@ scene.fog = new THREE.Fog(0x0e1116, 22, 60);
 const params = new URLSearchParams(location.search);
 const useForest = params.get('scene') !== 'arena';   // 默认森林场景，?scene=arena 回木箱场地
 const camera = new THREE.PerspectiveCamera(48, window.innerWidth / window.innerHeight, 0.1, 520);
+camera.layers.enable(1);            // layer1 = demo 技能特效（闪电/粒子/贴花都在 VFX 层）
 camera.layers.enable(2);            // layer2 = 事件特效，故意排除在光柱用的深度通道外
 
 const pmrem = new THREE.PMREMGenerator(renderer);
@@ -129,6 +131,7 @@ const CROUCH_SPEED = 1.3;   // 蹲走支撑脚实测 0.44m/16帧 与 0.34m/13帧
 const CROUCH_RATE = 1.5;   // Crouching.fbx 99 帧 @24fps，1.5× 下蹲约 2.7 s
 const JUMP_RATE = 1.15;   // 片段滞空 0.75 s / 物理滞空 0.663 s → 1.13~1.15，起跳与落地帧才对得上   // 跳跃原长 1.875 s，加快到 ~1.39 s
 let jumpT = 0;            // 剩余跳跃时间，>0 时压住行走状态机
+let skillDemo = params.get('skill');   // ?skill=ice|thunder 自动放一次技能，截图用
 let fxDemo = params.get('fx');     // ?fx=land|pickup 循环触发特效；配合 &fxhold=<秒> 定格在该相位
 let fxNext = 0;
 let fxFrozen = false;
@@ -337,6 +340,28 @@ let enemyAssets = null, wave = 0, waveT = 0;
 let hp = 100, hpMax = 100, hurtT = 0, downT = 0, hurtAnimT = 0;
 let atkT = 0, atkHit = false, atkCD = 0, atkTotal = 0;   // atkTotal = 本次挥击总时长（有片段用片段长，?noatk 用旧版 0.44 s）
 
+// ---- 技能（demo 的 VFX 管线）：命中结算直接扣僵尸血 ----
+const skills = createSkills({
+  scene, camera,
+  getEnemies: () => enemies,
+  radiusOf: ENEMY.radius,
+  onHit: (e, killed, element) => {
+    vfx.landing(e.root.position.x, e.root.position.y, e.root.position.z, killed ? 1.2 : 0.55);
+  },
+});
+skills.resize(window.innerWidth, window.innerHeight);
+let skillFrozen = false;
+
+function castSkill(element, force = false) {
+  if (!model) return null;
+  if (!force && (!grounded || crouched || downT > 0 || hurtAnimT > 0)) return null;
+  const dir = new THREE.Vector3(Math.sin(modelYaw), 0, Math.cos(modelYaw));
+  const dist = params.has('reach') ? parseFloat(params.get('reach')) : 12;
+  const a = skills.cast(element, model.position, dir, dist);
+  if (a) dbg('cast ' + element + ' ' + dist + 'm');
+  return a;
+}
+
 function spawnWave() {
   if (!enemyAssets) return;
   const n = Math.min(1 + wave, 4);
@@ -420,6 +445,7 @@ const right = new THREE.Vector3();
 const moveDir = new THREE.Vector3();
 const camPos = new THREE.Vector3();
 const desiredCam = new THREE.Vector3();
+const camBase = new THREE.Vector3();
 const UP = new THREE.Vector3(0, 1, 0);
 const tmpQ = new THREE.Quaternion();
 let camInit = false;
@@ -434,6 +460,7 @@ let py = 0, vy = 0, grounded = true, takeoffT = -1, wasGrounded = true;
 let collected = 0, playTime = 0, finished = false;
 let crouched = false;   // C 键切换：蹲下（这个动作只有下蹲过程，起身用 0.35 s 淡出回站立）
 const gameEl = document.getElementById('game');
+const flashEl = document.getElementById('flash');
 function resetGame() {
   py = 0; vy = 0; grounded = true; takeoffT = -1;
   collected = 0; playTime = 0; finished = false;
@@ -449,6 +476,8 @@ addEventListener('keydown', (e) => {
   if (e.code === 'KeyR') resetGame();
   if (e.code === 'KeyC' && (actions.crouch || actions.crouchwalk) && grounded) crouched = !crouched;
   if (e.code === 'KeyJ') startAttack();
+  if (e.code === 'Digit1') castSkill('ice');
+  if (e.code === 'Digit2') castSkill('thunder');
 });
 
 function update(dt) {
@@ -600,10 +629,11 @@ function update(dt) {
     rig.target.y + Math.sin(rig.pitch) * dist,
     rig.target.z + Math.cos(rig.yaw) * h
   );
-  if (!camInit) { camera.position.copy(desiredCam); camInit = true; }
-  else camera.position.lerp(desiredCam, Math.min(1, dt * 6));
-  camInit = true;
+  if (!camInit) { camBase.copy(desiredCam); camInit = true; }
+  else camBase.lerp(desiredCam, Math.min(1, dt * 6));
+  camera.position.copy(camBase).add(skills.shakeRig.shakeOffset);   // 技能镜头抖动叠在基准位姿上
   camera.lookAt(rig.target);
+  camera.rotateZ(skills.shakeRig.shakeRoll);
 
   if (forestLook && model) {
     forestLook.sun.position.copy(model.position).addScaledVector(forestLook.sunDir, 60);
@@ -621,6 +651,7 @@ function update(dt) {
       const d = new THREE.Vector3(Math.sin(az) * Math.cos(el), Math.sin(el), Math.cos(az) * Math.cos(el)).normalize();
       forestLook.setSunDir(d);
       if (atmo) atmo.setSunDir(d);
+      skills.setSunDir(d);
     }
   }
   if (params.has('atk') && model && enemies.length && grounded) {   // ?atk=1 自动连挥，配合 HUD 读数验证状态机
@@ -639,6 +670,14 @@ function update(dt) {
     } else if ((fxNext -= dt) <= 0) { fxNext = 0.9; fire(); }
   }
   vfx.update(fxFrozen ? 0 : dt);
+
+  if (skillDemo && model) {                 // ?skill=ice|thunder 自动放一次；&skillhold=<秒> 定格在该相位
+    castSkill(skillDemo, true);
+    const hold = params.has('skillhold') ? parseFloat(params.get('skillhold')) : null;
+    if (hold !== null) { for (let i = 0, n = Math.round(hold * 60); i < n; i++) skills.update(1 / 60); skillFrozen = true; }
+    skillDemo = null;
+  }
+  skills.update(skillFrozen ? 0 : dt);
   key.position.set(model ? model.position.x + 5.5 : 5.5, 9, model ? model.position.z + 4.5 : 4.5);
   ground.position.set(model ? model.position.x : 0, 0, model ? model.position.z : 0);
   grid.position.x = ground.position.x;
@@ -651,12 +690,21 @@ function update(dt) {
     };
     dbgEl.textContent = [f('crouch'), f('crouchwalk'), f('walk'), 'cur=' + curAnim, 'crouched=' + crouched].join('  ');
   }
+  if (flashEl) {                          // demo 的 ScreenFlash 靠合成 pass 读，这里用一层 DOM 叠色代替
+    const f = skills.flash;
+    flashEl.style.opacity = f.strength.toFixed(3);
+    if (f.strength > 0.001) {
+      flashEl.style.backgroundColor = 'rgb(' + Math.round(f.color.r * 255) + ',' + Math.round(f.color.g * 255) + ',' + Math.round(f.color.b * 255) + ')';
+    }
+  }
   if (mixer && !window.__frozen) mixer.update(dt);
 
   if (model && stateEl) {
     stateEl.textContent =
       `pos ${model.position.x.toFixed(1)}, ${model.position.z.toFixed(1)} · y ${py.toFixed(2)} · speed ${speed.toFixed(1)} m/s · clip ${(jumpT > 0 ? 'jump' : want).toUpperCase()}${grounded ? '' : ' · 空中'}` +
-      (params.has('atk') ? ` · cur ${curAnim} · atkT ${atkT.toFixed(2)} · hit ${atkHit ? 1 : 0} · 僵尸 ${enemies.filter((e) => e.alive).length}` : '');
+      (params.has('atk') ? ` · cur ${curAnim} · atkT ${atkT.toFixed(2)} · hit ${atkHit ? 1 : 0}` : '') +
+      ((params.has('atk') || params.has('skill')) ? ` · 僵尸 ${enemies.filter((e) => e.alive).length} 活` : '') +
+      ` · ${skills.hud()}`;
   }
 }
 
@@ -681,4 +729,5 @@ addEventListener('resize', () => {
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
   if (postfx) postfx.resize();
+  skills.resize(window.innerWidth, window.innerHeight);
 });

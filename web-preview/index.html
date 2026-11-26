@@ -15,6 +15,7 @@
   #game{position:fixed;left:50%;top:12px;transform:translateX(-50%);font-size:15px;letter-spacing:.4px;color:#9fe6ff;text-shadow:0 1px 4px #000;pointer-events:none;font-variant-numeric:tabular-nums}
   #game.win{color:#8dffa8;font-size:18px}
   #vig{position:fixed;inset:0;pointer-events:none;background:radial-gradient(ellipse at 50% 46%, rgba(0,0,0,0) 42%, rgba(8,12,16,0.34) 100%)}
+  #flash{position:fixed;inset:0;pointer-events:none;opacity:0;mix-blend-mode:screen}
   #dbg{position:fixed;left:12px;bottom:10px;font-size:12px;line-height:1.45;color:#7fd4ff;white-space:pre;text-shadow:0 1px 3px #000;pointer-events:none;opacity:.9}
 </style>
 </head>
@@ -23,13 +24,14 @@
 <div id="hud">
   <b>简单3d游戏 · <span id="lodname">LOD0</span></b><br />
   <span class="k" id="cliplist"></span><br />
-  <span class="k">WASD 移动 · 鼠标左键拖拽转视角 · 滚轮缩放 · J 挥击</span><br />
+  <span class="k">WASD 移动 · 鼠标左键拖拽转视角 · 滚轮缩放 · J 挥击 · 1 冰枪 · 2 雷枪</span><br />
   <span class="k" id="state"></span>
 </div>
 <div id="stats"></div>
 <div id="game"></div>
 <div id="dbg"></div>
 <div id="vig"></div>
+<div id="flash"></div>
 <div id="loading">loading model …</div>
 <script>
   // Runs before the module script: under file:// the ES module is blocked by CORS,
