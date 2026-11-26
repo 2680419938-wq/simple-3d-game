@@ -70,6 +70,9 @@ export class Progression {
     return true;
   }
 
+  /** 手动升一级（按键/调试用），不消耗经验。 */
+  grantLevel() { this.xp = 0; this.level++; return 1; }
+
   /** 返回本次连升了几级（一次多杀可能连升）。 */
   addKill(n = 1) {
     this.xp += n;

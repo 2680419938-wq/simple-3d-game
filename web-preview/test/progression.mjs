@@ -18,6 +18,11 @@ ok('need grows with level', needFor(1) === 8 && needFor(3) === 12);
 const ups = p.addKill(20);
 ok('addKill returns level-ups and keeps remainder', ups === 2 && p.level === 3 && p.xp === 2, 'ups=' + ups + ' lv=' + p.level + ' xp=' + p.xp);
 
+// 按键升级：等级 +1、经验清零、仍能抽到卡
+const lv0 = p.level;
+ok('grantLevel advances one level and clears xp', p.grantLevel() === 1 && p.level === lv0 + 1 && p.xp === 0);
+ok('grantLevel keeps slots intact', p.slots.length === SLOTS);
+
 // 抽卡：有空槽时必给解锁
 const first = p.rollCards(3);
 ok('rolls 3 distinct cards', first.length === 3 && new Set(first.map((c) => c.kind + ':' + c.element)).size === 3);

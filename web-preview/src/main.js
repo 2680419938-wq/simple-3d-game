@@ -8,7 +8,7 @@ import { addAtmo } from './atmo.js';
 import { createPostFX } from './postfx.js';
 import { createVfx } from './vfx.js';
 import { createSkills } from './skills.js';
-import { Progression, SKILL_META, SLOTS, cardText } from './progression.js';
+import { Progression, SKILL_META, SLOTS, POOL, cardText } from './progression.js';
 import { loadEnemyAssets, Enemy, ENEMY } from './enemy.js';
 
 const ATMO_SCALE = 0.25;   // 线性空间加色约比 sRGB 亮 4 倍，0.25 与原观感对齐
@@ -391,6 +391,17 @@ function gainXp(kills = 1) {
   if (ups > 0) { cardQueue += ups; if (!cardOpen) openCards(); }
 }
 
+/** L 键：直接升一级并弹卡；K 键：免费解锁下一个技能（试玩用，不计击杀）。 */
+function levelUpByKey() {
+  cardQueue += prog.grantLevel();
+  if (!cardOpen) openCards();
+}
+
+function unlockNextByKey() {
+  const next = POOL.find((el) => !prog.has(el));
+  return next ? prog.unlock(next) : false;
+}
+
 const slotElements = () => prog.slots.map((s) => (s ? s.element : null));
 
 if (params.has('unlock')) {              // ?unlock=1 直接填满 4 槽，供无头截图看技能栏
@@ -554,6 +565,8 @@ addEventListener('keydown', (e) => {
     else if (e.code === 'Digit3' || e.code === 'Numpad3') chooseCard(2);
     return;
   }
+  if (e.code === 'KeyL') levelUpByKey();
+  if (e.code === 'KeyK') unlockNextByKey();
   if (e.code === 'KeyJ') startAttack();
   if (e.code === 'Digit1') castSlot(0);
   if (e.code === 'Digit2') castSlot(1);
