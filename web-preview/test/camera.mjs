@@ -1,4 +1,4 @@
-import { rayBox, clearDistance } from '../src/camera.js';
+import { rayBox, clearDistance, wrapAngle, yawToLookAt, approachAngle } from '../src/camera.js';
 
 let pass = 0, fail = 0;
 const ok = (name, cond, extra = '') => {
@@ -40,6 +40,31 @@ ok('nearest blocker wins', near(clearDistance(origin, dir, [far, trunk], 10), 4.
 const up = { x: 0, y: 0.5, z: 0.866 };
 ok('looking up over a short trunk is clear', clearDistance(origin, up, [{ minx: -0.4, maxx: 0.4, minz: 0.6, maxz: 1.4, top: 0.5 }], 6) === 6);
 ok('looking up into a tall trunk is blocked', clearDistance(origin, up, [{ minx: -0.4, maxx: 0.4, minz: 0.6, maxz: 1.4, top: 6 }], 6) < 6);
+
+// ---- 软锁定：yaw 数学 ----
+const PI = Math.PI, EPS = 1e-9;
+ok('wrapAngle maps pi to pi', near(Math.abs(wrapAngle(PI)), PI, 1e-9), String(wrapAngle(PI)));
+ok('wrapAngle maps 3pi to pi', near(Math.abs(wrapAngle(3 * PI)), PI, 1e-9));
+ok('wrapAngle unwraps 2pi offsets', near(wrapAngle(0.3 + 2 * PI), 0.3, 1e-9));
+
+// forward = (−sin yaw, 0, −cos yaw)：yaw=0 时相机在 +Z，forward 指向 −Z
+ok('yaw 0 looks toward -Z', near(yawToLookAt(0, 0, 0, -5), 0, 1e-9), String(yawToLookAt(0, 0, 0, -5)));
+ok('yaw pi/2 looks toward -X', near(yawToLookAt(0, 0, -5, 0), PI / 2, 1e-9), String(yawToLookAt(0, 0, -5, 0)));
+ok('yaw -pi/2 looks toward +X', near(yawToLookAt(0, 0, 5, 0), -PI / 2, 1e-9), String(yawToLookAt(0, 0, 5, 0)));
+// 与 forward 公式自洽：用得到的 yaw 算 forward，应指向目标
+{
+  const yaw = yawToLookAt(2, 3, 5, 7);
+  const fx = -Math.sin(yaw), fz = -Math.cos(yaw);
+  const dx = 5 - 2, dz = 7 - 3, len = Math.hypot(dx, dz);
+  ok('yawToLookAt agrees with the forward formula', near(fx, dx / len, 1e-9) && near(fz, dz / len, 1e-9));
+}
+
+ok('approachAngle snaps when inside the step', approachAngle(0.1, 0.15, 0.1) === 0.15);
+ok('approachAngle steps toward the target', near(approachAngle(0, 1, 0.2), 0.2, 1e-9));
+ok('approachAngle steps backwards', near(approachAngle(1, 0, 0.2), 0.8, 1e-9));
+ok('approachAngle takes the short way around pi', near(wrapAngle(approachAngle(3.0, -3.0, 0.1) - 3.0), 0.1, 1e-9), String(approachAngle(3.0, -3.0, 0.1)));
+// 从 3.0 转到 −3.0 走 +0.3 的短弧（不是 −6.0 的长弧）
+ok('approachAngle never overshoots', Math.abs(wrapAngle(approachAngle(0, 0.05, 1) - 0.05)) < 1e-12);
 
 console.log(pass + ' PASS, ' + fail + ' FAIL');
 process.exit(fail ? 1 : 0);

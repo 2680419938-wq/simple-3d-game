@@ -28,6 +28,25 @@ export function rayBox(ox, oy, oz, dir, c, r = 0) {
  * 目标点到相机方向上可用的距离：撞到树干/箱体就在命中处截断。
  * minTop 用来忽略矮箱子——站在上面时它的顶面不该把镜头顶到角色背上。
  */
+/** 把角度规整到 (−π, π]，避免插值绕远路。 */
+export function wrapAngle(a) {
+  let x = (a + Math.PI) % (Math.PI * 2);
+  if (x < 0) x += Math.PI * 2;
+  return x - Math.PI;
+}
+
+/** 相机 yaw 转到「从背后看向 (tx,tz)」需要的角度：forward = (−sin yaw, 0, −cos yaw)。 */
+export function yawToLookAt(px, pz, tx, tz) {
+  return Math.atan2(-(tx - px), -(tz - pz));
+}
+
+/** 朝目标角转 maxStep 弧度（走最短弧），不越过目标。 */
+export function approachAngle(cur, target, maxStep) {
+  const d = wrapAngle(target - cur);
+  if (Math.abs(d) <= maxStep) return target;
+  return cur + Math.sign(d) * maxStep;
+}
+
 export function clearDistance(origin, dir, colliders, maxDist, { radius = 0.3, minTop = 1.4, pad = 0.12 } = {}) {
   let best = maxDist;
   let blocked = false;

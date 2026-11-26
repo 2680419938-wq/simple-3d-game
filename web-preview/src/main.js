@@ -9,7 +9,7 @@ import { createPostFX } from './postfx.js';
 import { createVfx } from './vfx.js';
 import { createSkills } from './skills.js';
 import { Progression, SKILL_META, SLOTS, POOL, cardText } from './progression.js';
-import { clearDistance } from './camera.js';
+import { clearDistance, approachAngle, yawToLookAt } from './camera.js';
 import { loadEnemyAssets, Enemy, ENEMY } from './enemy.js';
 
 const ATMO_SCALE = 0.25;   // 线性空间加色约比 sRGB 亮 4 倍，0.25 与原观感对齐
@@ -97,8 +97,14 @@ addEventListener('keyup', (e) => keys.delete(e.code));
 // 视角操作：点一下画面锁定鼠标，之后直接移动鼠标转视角（不用一直按左键）；ESC 解锁，解锁状态下左键拖拽也能转
 let dragging = false;
 let pointerLocked = false;
-const wantLock = !params.has('nolock');      // ?nolock=1 关掉指针锁定（自动化截图用）
+const wantLock = !params.has('nolock');
+// 软锁定：站定或出手时镜头缓缓对准最近的活僵尸；?aim=<倍率> 调速度，?noaim=1 关掉
+const AIM = { range: 11, rate: 2.6 * (params.has('aim') ? parseFloat(params.get('aim')) : 1), holdOff: 1.2 };
+let lookIdle = 9, aimW = 0, focus = null;
+const holdMoveState = () => keys.has('KeyW') || keys.has('KeyS') || keys.has('KeyA') || keys.has('KeyD')
+  || keys.has('ArrowUp') || keys.has('ArrowDown') || keys.has('ArrowLeft') || keys.has('ArrowRight');      // ?nolock=1 关掉指针锁定（自动化截图用）
 function look(dx, dy) {
+  lookIdle = 0;                            // 手动转视角 → 软锁定让路 1.2 s
   rig.yaw -= dx * 0.0023;
   rig.pitch = THREE.MathUtils.clamp(rig.pitch + dy * 0.0017, -0.22, 1.15);   // 允许略微仰视，避免只能俯视
 }
@@ -475,7 +481,7 @@ function castSlot(i, force = false) {
 
 function spawnWave() {
   if (!enemyAssets) return;
-  const n = Math.min(2 + wave, 8);                       // 无限波：每波多一只，最多 8 只同屏
+  const n = params.has('foes') ? parseInt(params.get('foes'), 10) : Math.min(2 + wave, 8);   // ?foes=1 截图只摆一只
   const hpScale = 1 + 0.22 * (wave - 1);                  // 每波血量 +22%
   for (let i = 0; i < n; i++) {
     const [sx, sz] = SPAWNS[(wave * 2 + i) % SPAWNS.length];
@@ -493,6 +499,10 @@ loadEnemyAssets()
 function startAttack() {
   if (!model || atkT > 0 || atkCD > 0 || !grounded || crouched || downT > 0 || hurtAnimT > 0) return;
   const a = params.has('noatk') ? null : actions.attack;   // ?noatk=1 退回旧版「无片段 + 弧光」，用于前后对照
+  if (focus) {                                  // 软锁定：出手时面朝锁定的那只，别朝着空气挥
+    const dx = focus.root.position.x - model.position.x, dz = focus.root.position.z - model.position.z;
+    if (Math.hypot(dx, dz) < 4) modelYaw = Math.atan2(dx, dz);
+  }
   atkTotal = a ? ATK_TOTAL : 0.44;
   atkT = atkTotal;
   atkHit = false;
@@ -620,6 +630,26 @@ addEventListener('keydown', (e) => {
 
 function update(dt) {
   if (cardOpen) return;                  // 选卡时整个世界暂停
+
+  // 软锁定：站定不动时镜头缓缓转向最近的活僵尸；一按 WASD 就交还控制权，手转视角后 1.2 s 内不抢
+  lookIdle += dt;
+  focus = null;
+  if (model && !params.has('noaim') && !holdMoveState()) {
+    let bestD = AIM.range * AIM.range;
+    for (const en of enemies) {
+      if (!en.alive) continue;
+      const dx = en.root.position.x - model.position.x, dz = en.root.position.z - model.position.z;
+      const d2 = dx * dx + dz * dz;
+      if (d2 < bestD) { bestD = d2; focus = en; }
+    }
+  }
+  const aiming = !!focus && lookIdle > AIM.holdOff;
+  aimW += ((aiming ? 1 : 0) - aimW) * Math.min(1, dt * (aiming ? 2.4 : 3.6));
+  if (aiming && aimW > 0.01) {
+    const ty = yawToLookAt(model.position.x, model.position.z, focus.root.position.x, focus.root.position.z);
+    rig.yaw = approachAngle(rig.yaw, ty, dt * AIM.rate * aimW);
+  }
+
   // movement is camera relative; W pushes away from the camera
   forward.set(-Math.sin(rig.yaw), 0, -Math.cos(rig.yaw)).normalize();
   right.crossVectors(forward, UP).normalize();   // forward x up = 屏幕右方（UP x forward 得到左方，A/D 会反）
@@ -661,6 +691,11 @@ function update(dt) {
     if (moving) {
       moveDir.normalize();
       modelYaw = Math.atan2(moveDir.x, moveDir.z); // model faces +Z
+    } else if (focus && aimW > 0.05) {
+      // 站定时跟着软锁定转身：挥击方向与技能都取自 modelYaw，不对齐就会朝空气挥
+      modelYaw = approachAngle(modelYaw,
+        Math.atan2(focus.root.position.x - model.position.x, focus.root.position.z - model.position.z),
+        dt * 4 * aimW);
     }
     // run reads as a sprint: lean the whole body into the direction of travel
     const leanTarget = THREE.MathUtils.clamp((speed - WALK_SPEED) / (RUN_SPEED - WALK_SPEED), 0, 1) * LEAN_MAX;
@@ -848,6 +883,7 @@ function update(dt) {
       `pos ${model.position.x.toFixed(1)}, ${model.position.z.toFixed(1)} · y ${py.toFixed(2)} · speed ${speed.toFixed(1)} m/s · clip ${(jumpT > 0 ? 'jump' : want).toUpperCase()}${grounded ? '' : ' · 空中'}` +
       (params.has('atk') ? ` · cur ${curAnim} · atkT ${atkT.toFixed(2)} · hit ${atkHit ? 1 : 0}` : '') +
       ((params.has('atk') || params.has('skill')) ? ` · 僵尸 ${enemies.filter((e) => e.alive).length} 活` : '') +
+    (aimW > 0.15 ? ' · 锁定' : '') +
       ` · ${skillHud()}`;
   }
 }
