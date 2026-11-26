@@ -404,6 +404,16 @@ function unlockNextByKey() {
 
 const slotElements = () => prog.slots.map((s) => (s ? s.element : null));
 
+/** 技能栏：每个槽带按键号，空槽写「空」，冷却中写剩余秒数。 */
+function skillHud() {
+  return prog.slots.map((s, i) => {
+    const key = '[' + (i + 1) + '] ';
+    if (!s) return key + '空';
+    const cd = skills.cooling(s.element);
+    return key + SKILL_META[s.element].name + ' ' + (cd > 0 ? cd.toFixed(1) + 's' : '就绪');
+  }).join(' · ');
+}
+
 if (params.has('unlock')) {              // ?unlock=1 直接填满 4 槽，供无头截图看技能栏
   for (const el of Object.keys(SKILL_META)) prog.unlock(el);
 }
@@ -799,7 +809,7 @@ function update(dt) {
       `pos ${model.position.x.toFixed(1)}, ${model.position.z.toFixed(1)} · y ${py.toFixed(2)} · speed ${speed.toFixed(1)} m/s · clip ${(jumpT > 0 ? 'jump' : want).toUpperCase()}${grounded ? '' : ' · 空中'}` +
       (params.has('atk') ? ` · cur ${curAnim} · atkT ${atkT.toFixed(2)} · hit ${atkHit ? 1 : 0}` : '') +
       ((params.has('atk') || params.has('skill')) ? ` · 僵尸 ${enemies.filter((e) => e.alive).length} 活` : '') +
-      ` · ${skills.hud(slotElements().filter(Boolean))}`;
+      ` · ${skillHud()}`;
   }
 }
 

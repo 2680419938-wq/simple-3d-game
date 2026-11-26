@@ -179,11 +179,6 @@ export function createSkills({ scene, camera, getEnemies, radiusOf = 0.5, onHit 
       if (ability) noFog(ability.group);
       return ability;
     },
-    hud(elements = ['ice', 'thunder']) {
-      return elements
-        .map((e) => e + (cooling(e) > 0 ? ' ' + cooling(e).toFixed(1) + 's' : ' 就绪'))
-        .join(' · ');
-    },
     update(dt) {
       frame.uTime.value += dt;
       frame.uDelta.value = dt;
