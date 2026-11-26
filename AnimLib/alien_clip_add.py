@@ -80,6 +80,10 @@ bpy.ops.wm.read_factory_settings(use_empty=True)
 sc = bpy.context.scene
 
 bpy.ops.import_scene.fbx(filepath=A['fbx'])
+# 源 FBX 可能是 With Skin 下载（带蒙皮网格）：只留 mixamo 骨架，否则整套网格会被导进主 GLB
+_mix0 = find('mixamorig')
+for o in list(bpy.data.objects):
+    if o is not _mix0: bpy.data.objects.remove(o, do_unlink=True)
 srcfps = sc.render.fps / (sc.render.fps_base or 1.0)
 mix = find('mixamorig')
 macts = [a for a in bpy.data.actions]

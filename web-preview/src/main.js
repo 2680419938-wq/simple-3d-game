@@ -229,7 +229,7 @@ new GLTFLoader().load(glbUrl, (gltf) => {
   clips.crouch = cwRaw ? THREE.AnimationUtils.subclip(cwRaw, 'CrouchIdle', 1, 2, 24) : clips.crouch;   // 蹲待机 = 同一动作的第 1 帧姿态（双脚并拢）
   // 攻击：源片 2.67 s 里前 10 帧只是僵尸的起手站姿，取 10..40 帧（挥爪 + 扑咬），1.25 s
   const atkRaw = byName('Attack');
-  clips.attack = atkRaw ? THREE.AnimationUtils.subclip(atkRaw, 'Attack', 10, 40, 24) : null;
+  clips.attack = atkRaw ? THREE.AnimationUtils.subclip(atkRaw, 'Attack', 3, 19, 24) : null;
   if (clips.attack) ATK_TOTAL = clips.attack.duration / ATK_RATE;
   if (clips.idle) { actions.idle = mixer.clipAction(clips.idle); actions.idle.play(); }
   for (const k of ['walk', 'run', 'jump', 'crouch', 'crouchwalk', 'attack']) {
@@ -321,8 +321,8 @@ function startJump() {
 
 // ---- 战斗：玩家挥击 + 僵尸（动作是 public/models/zombie 下的 Mixamo FBX，占位体格）----
 // startup = 挥爪真正伸出去那一刻（源片 F24，裁剪后 0.58 s ÷ 1.45 倍速）
-const ATTACK = { startup: 0.40, active: 0.22, recovery: 0.27, reach: 1.9, dot: 0.35, dmg: 20, cd: 0.30, lunge: 2.2 };
-const ATK_RATE = 1.45;
+const ATTACK = { startup: 0.19, active: 0.16, recovery: 0.26, reach: 1.9, dot: 0.35, dmg: 20, cd: 0.30, lunge: 2.2 };
+const ATK_RATE = 1.10;
 let ATK_TOTAL = ATTACK.startup + ATTACK.active + ATTACK.recovery;
 const SPAWNS = [[4.4, 3.2], [-4.6, 2.8], [1.2, -5.4], [-3.4, -4.8], [5.8, -1.2], [-6.2, -0.6]];
 if (params.has('foe')) SPAWNS[0] = params.get('foe').split(',').map(Number);   // ?foe=x,z 截图摆位
