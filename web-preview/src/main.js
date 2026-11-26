@@ -227,12 +227,16 @@ new GLTFLoader().load(glbUrl, (gltf) => {
   // 原片 1..43 帧几乎不动（两脚位移 < 3 cm），真正的迈步在 49..73 帧；只取这一段当循环
   clips.crouchwalk = cwRaw || null;   // Crouched Walking：26 帧 1.04 s，首末帧完全一致（seam 0.001）可直循环
   clips.crouch = cwRaw ? THREE.AnimationUtils.subclip(cwRaw, 'CrouchIdle', 1, 2, 24) : clips.crouch;   // 蹲待机 = 同一动作的第 1 帧姿态（双脚并拢）
-  // 攻击：源片 2.67 s 里前 10 帧只是僵尸的起手站姿，取 10..40 帧（挥爪 + 扑咬），1.25 s
+  // 攻击：源片 34 帧 30fps，导出后 27 帧；取 3..19 帧（甩臂横扫），1.10 倍速 → 0.61 s
   const atkRaw = byName('Attack');
   clips.attack = atkRaw ? THREE.AnimationUtils.subclip(atkRaw, 'Attack', 3, 19, 24) : null;
   if (clips.attack) ATK_TOTAL = clips.attack.duration / ATK_RATE;
+  // 受击：源片 53 帧 24fps（原地已剥掉 0.8 m 后退漂移）；取 9..33 帧（挨打 → 弯腰最深 → 抬到一半），1.9 倍速 → 0.53 s
+  const hurtRaw = byName('Hurt');
+  clips.hurt = hurtRaw ? THREE.AnimationUtils.subclip(hurtRaw, 'Hurt', 9, 33, 24) : null;
+  if (clips.hurt) HURT_TOTAL = clips.hurt.duration / HURT_RATE;
   if (clips.idle) { actions.idle = mixer.clipAction(clips.idle); actions.idle.play(); }
-  for (const k of ['walk', 'run', 'jump', 'crouch', 'crouchwalk', 'attack']) {
+  for (const k of ['walk', 'run', 'jump', 'crouch', 'crouchwalk', 'attack', 'hurt']) {
     if (!clips[k]) continue;
     actions[k] = mixer.clipAction(clips[k]);
     actions[k].play();
@@ -250,7 +254,7 @@ new GLTFLoader().load(glbUrl, (gltf) => {
     const k = (want && actions[want]) ? want
       : actions.walk ? 'walk' : actions.idle ? 'idle' : actions.run ? 'run' : null;
     if (!k) { console.warn('no clip to freeze'); }
-    for (const n of ['idle', 'walk', 'run', 'jump', 'attack']) {
+    for (const n of ['idle', 'walk', 'run', 'jump', 'attack', 'hurt']) {
       if (!actions[n]) continue;
       actions[n].stop();
       actions[n].enabled = false;
@@ -324,11 +328,13 @@ function startJump() {
 const ATTACK = { startup: 0.19, active: 0.16, recovery: 0.26, reach: 1.9, dot: 0.35, dmg: 20, cd: 0.30, lunge: 2.2 };
 const ATK_RATE = 1.10;
 let ATK_TOTAL = ATTACK.startup + ATTACK.active + ATTACK.recovery;
+const HURT_RATE = 1.9;
+let HURT_TOTAL = 0.53;
 const SPAWNS = [[4.4, 3.2], [-4.6, 2.8], [1.2, -5.4], [-3.4, -4.8], [5.8, -1.2], [-6.2, -0.6]];
 if (params.has('foe')) SPAWNS[0] = params.get('foe').split(',').map(Number);   // ?foe=x,z 截图摆位
 const enemies = [];
 let enemyAssets = null, wave = 0, waveT = 0;
-let hp = 100, hpMax = 100, hurtT = 0, downT = 0;
+let hp = 100, hpMax = 100, hurtT = 0, downT = 0, hurtAnimT = 0;
 let atkT = 0, atkHit = false, atkCD = 0, atkTotal = 0;   // atkTotal = 本次挥击总时长（有片段用片段长，?noatk 用旧版 0.44 s）
 
 function spawnWave() {
@@ -348,7 +354,7 @@ loadEnemyAssets()
   .catch((e) => { console.error('enemy load failed', e); dbg('enemy ERR ' + (e && e.message)); });
 
 function startAttack() {
-  if (!model || atkT > 0 || atkCD > 0 || !grounded || crouched || downT > 0) return;
+  if (!model || atkT > 0 || atkCD > 0 || !grounded || crouched || downT > 0 || hurtAnimT > 0) return;
   const a = params.has('noatk') ? null : actions.attack;   // ?noatk=1 退回旧版「无片段 + 弧光」，用于前后对照
   atkTotal = a ? ATK_TOTAL : 0.44;
   atkT = atkTotal;
@@ -385,6 +391,20 @@ function hurtPlayer(dmg) {
   if (hurtT > 0 || downT > 0) return;
   hp = Math.max(0, hp - dmg);
   hurtT = 0.6;                                   // 无敌帧，避免被同一记攻击连扣
+  const ha = actions.hurt;
+  if (ha && atkT <= 0) {                         // 挥击中不打断，其余状态立刻缩一下
+    hurtAnimT = HURT_TOTAL;
+    ha.reset();
+    ha.setLoop(THREE.LoopOnce, 1);
+    ha.clampWhenFinished = true;
+    ha.enabled = true;
+    ha.setEffectiveTimeScale(HURT_RATE);
+    ha.setEffectiveWeight(1);
+    ha.play();
+    const from = actions[curAnim];
+    if (from && from !== ha) from.crossFadeTo(ha, 0.05, false);
+    curAnim = 'hurt';
+  }
   vfx.landing(model.position.x, py, model.position.z, 0.9);
   if (hp <= 0) {
     hp = hpMax;
@@ -417,7 +437,7 @@ const gameEl = document.getElementById('game');
 function resetGame() {
   py = 0; vy = 0; grounded = true; takeoffT = -1;
   collected = 0; playTime = 0; finished = false;
-  hp = hpMax; hurtT = 0; downT = 0; atkT = 0; atkCD = 0; atkHit = false;
+  hp = hpMax; hurtT = 0; downT = 0; hurtAnimT = 0; atkT = 0; atkCD = 0; atkHit = false;
   wave = 0; waveT = 0;
   for (const e of enemies) if (e.root.parent) e.root.parent.remove(e.root);
   enemies.length = 0;
@@ -455,6 +475,9 @@ function update(dt) {
   if (!actions[want]) want = 'idle';
   if (atkT > 0) {
     // 挥击片段独占权重，locomotion 等它播完再接管（结束那一帧由 setAnim 交叉淡出）
+  } else if (hurtAnimT > 0) {
+    hurtAnimT = Math.max(0, hurtAnimT - dt);
+    if (hurtAnimT === 0) { curAnim = 'hurt'; setAnim(want, 0.22); }
   } else if (jumpT > 0) {
     jumpT = Math.max(0, jumpT - dt);
     if (jumpT === 0) { curAnim = 'jump'; setAnim(want); }
@@ -501,6 +524,7 @@ function update(dt) {
     // 挥击推进：前冲相位 + 命中窗口（startup 结束那一刻判一次）
     atkCD = Math.max(0, atkCD - dt);
     if (hurtT > 0) hurtT -= dt;
+    if (params.has('hurt') && hurtT <= 0 && downT <= 0) hurtPlayer(0);   // ?hurt=1 循环播受击，截图用
     if (downT > 0) downT -= dt;
     if (atkT > 0) {
       atkT = Math.max(0, atkT - dt);

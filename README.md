@@ -176,13 +176,20 @@ blender -b --python AnimLib/inspect_fbx.py -- "D:\浏览器·\xxx.fbx"
   命中范围：前伸 1.9 m + 敌人半径、只打正面朝向点积 ≥ 0.35（±70°）；20 伤、冷却 0.30 s。攻击期间 locomotion 让出权重（`if (atkT > 0)` 跳过 `setAnim`），片段播完由 `setAnim(want, 0.18)` 混回走/跑/站。
 - **为什么要裁帧 + 变速**：源片是「架势 → 甩臂掠过身前 → 慢慢收势」，尾巴占了 1/3 的时长（第 23 帧后基本回到起点），直接播会拖到没法打。只留第 3–19 帧再去掉长尾，1.10 倍速压到 0.61 s。逐帧量的是「肩到掌距离 + 掌相对髋的前后位移」：第 8 帧前后位移 0.61 m 且手臂满伸，是最前的一刻。
 - **源 FBX 带蒙皮怎么办**：`Mutant Punch.fbx` 是 With Skin 下载（63 骨 + 3 个网格 + 4 张 2K 贴图）。`alien_clip_add.py` 在导入后先删掉除 mixamo 骨架外的所有对象，否则整套网格会被一起导进主 GLB；`inspect_fbx.py` 报「网格 3(7448 tri)」就是这个信号。
-- **受击与波次**：玩家 100 HP，被打 12 点、0.6 s 无敌帧、归零回原点满血；一波清空 2.8 s 后刷下一波，最多 3 波（1/2/3/4 只）。
+- **主角受击动作**：Mixamo「Zombie Reaction Hit」重定向到异形骨架（源片 53 帧 @24 fps = 2.17 s，取第 9–33 帧 = 1.0 s，播 1.9 倍速 → 0.53 s）：
+  ```bash
+  blender -b --python AnimLib/alien_clip_add.py -- --fbx 'AnimSource/hit_react/Zombie Reaction Hit.fbx' \
+          --name Hurt --src dragon-man-final/Alien_Walk_Jump_2k.glb --out <out.glb> --inplace
+  ```
+  状态机优先级是 **attack > hurt > jump > locomotion**：受击时立刻交叉淡入（0.05 s），挥击中不打断（`atkT > 0` 时跳过受击片段，只扣血），片段播完用 `setAnim(want, 0.22)` 混回走/跑/站。受击期间不能出刀。
+- **为什么受击必须加 `--inplace`**：这条动作在 Mixamo 页面勾了 In Place，实测**没去掉**——逐帧量 hips 从 y=0.01 漂到 0.80（向后退了 0.8 m），于是 `inspect_fbx.py` 的「原地」判定也漏掉了它（只看部分分量，别拿它当唯一依据）。`alien_clip_add.py` 的 `--inplace` 在算完 `TWN` 之后把根位移的 x/y 归零、保留竖直起伏；重定向后逐帧量 `CC_Base_Hip_02` 的水平漂移 = **0.000**，头高 1.746 → 1.580（第 25 帧弯到最低）→ 1.731。
+- **受击与波次**：玩家 100 HP，被打 12 点、0.6 s 无敌帧（同时是受击片段的播放窗口）、归零回原点满血；一波清空 2.8 s 后刷下一波，最多 3 波（1/2/3/4 只）。
 - **HUD**：游戏行变成 `HP 100 / 100 · 僵尸 1 · 第 1 波 · 收集 0 / 12 · 0.4 s`，被击倒时显示「被击倒 · 重生中」。
 - **测试**：`node test/enemyglb.mjs`（14 项）验烘好的 GLB——根节点 scale 为 1、5 条 clip 齐全、每条 ≥150 条轨道、3 个网格拆成 7 个蒙皮图元共 7448 三角、rest pose 髋 1.08 m / 头 1.82 m，并且逐条播一遍确认躯干仍竖直（防「套错坐标系整个人躺倒」这类回归）。`node test/enemy.mjs`（16 项）走回退路径：骨数、占位体格高度与脚底、动作确实在驱动骨骼（手臂骨四元数与 rest pose 的夹角 > 0.05）、追击位移、20 伤存活 / 再 20 伤阵亡播 death、2.6 s 后隐藏。跑法与 `world.mjs`、`physics.mjs` 一样在 `web-preview` 下 `node test/xxx.mjs`。node 里 GLTFLoader 没有 DOM/ImageBitmap，测试先用 20 行把 GLB 的纹理解析掉再喂给它。
-- **调试参数**：`?foe=x,z` 把第一只僵尸摆到指定坐标（截图用，默认在 `SPAWNS` 里）；`?atk=1` 自动连挥（HUD 额外显示 `cur / atkT / hit / 僵尸数`，用来验状态机）；`?noatk=1` 退回旧版「无片段，只有弧光 + 前冲」，专门拍前后对照。
+- **调试参数**：`?foe=x,z` 把第一只僵尸摆到指定坐标（截图用，默认在 `SPAWNS` 里）；`?atk=1` 自动连挥（HUD 额外显示 `cur / atkT / hit / 僵尸数`，用来验状态机）；`?noatk=1` 退回旧版「无片段，只有弧光 + 前冲」，专门拍前后对照；`?hurt=1` 每 0.6 s 循环播一次受击（扣 0 HP，截图用），配合 `&clip=hurt&freeze=<秒>` 可以定格看单帧。
 - **贴图与过曝**：真贴图下敌人的受击闪白会整只过曝成橙色，`setFlash` 的 emissive 增量从 0.7 收到 0.34、强度从 1.6 收到 0.8、衰减从 4/s 提到 6/s（0.17 s），现在只是「亮一下」。
 - **已知缺口**：主角借的是变异体的勾拳——手臂在胸前横扫、不是直线刺出，从正前方看会读成「双爪抱在胸前」，从追尾镜头看是「爪子扫过身前」；换更直的动作只需换 `--fbx` 与裁剪帧号。还没有关卡化（出生点/出口/开门条件）。
-- **证据图**：`_shots/combat/CMP_attack.png`（上排旧 vs 新同机位，下排 4 个关键帧）、`_shots/combat/CMP_zombie.png`（占位体格 vs 真蒙皮网格）。
+- **证据图**：`_shots/combat/CMP_hurt.png`（起手 / 头后甩 / 上身后仰 / 与僵尸同框四格）、`_shots/combat/CMP_attack.png`（上排旧 vs 新同机位，下排 4 个关键帧）、`_shots/combat/CMP_zombie.png`（占位体格 vs 真蒙皮网格）。
 
 ## 角色指标（龙人，实测）
 
