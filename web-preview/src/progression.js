@@ -1,14 +1,26 @@
 // 割草 roguelite 的等级 / 技能槽 / 升级抽卡。纯数据层，不 import three，方便 node 直接测。
 export const SLOTS = 4;
 
-/** 技能池：只放实测在本项目里能正常渲染的四个（snare/glacier/meteor 缺主体几何，void 只有一条光带）。 */
+/** 技能池：demo 的全部十个。起手一个都没有，靠升级卡抽。 */
 export const SKILL_META = {
-  ice: { name: '冰枪', desc: '沿朝向一条冰线，穿过的全部命中' },
-  thunder: { name: '雷枪', desc: '直线落雷，落点连锁电弧' },
-  beam: { name: '光柱', desc: '持续光束，按 tick 反复伤害' },
-  phoenix: { name: '凤凰', desc: '身前爆开，范围最大' },
+  ice:         { name: '冰枪',   desc: '沿朝向一条冰线，穿过的全部命中' },
+  thunder:     { name: '雷枪',   desc: '直线落雷，落点连锁电弧' },
+  beam:        { name: '光柱',   desc: '持续光束，按 tick 反复伤害' },
+  phoenix:     { name: '凤凰',   desc: '身前爆开，范围最大' },
+  void:        { name: '虚空',   desc: '暗影光带横扫一条走廊' },
+  singularity: { name: '奇点',   desc: '定点塌缩，持续吸附并反复伤害' },
+  worldtree:   { name: '世界树', desc: '藤蔓从地面炸开，大范围多段' },
+  snare:       { name: '电笼',   desc: '落点张起雷笼，笼内持续电击' },
+  glacier:     { name: '冰川冠', desc: '地面拔起一圈冰晶墙，命中冻结' },
+  meteor:      { name: '陨石',   desc: '抛射火球，落地爆炸（伤害最高）' },
 };
 export const POOL = Object.keys(SKILL_META);
+
+/** 各技能的舒适施法距离（米）：瞬发近战型短，抛射/定点型中等，光柱射得远。 */
+export const RANGE = {
+  ice: 11, thunder: 12, beam: 13, phoenix: 6,
+  void: 9, singularity: 8, worldtree: 6, snare: 7, glacier: 7, meteor: 10,
+};
 
 export const CARD = {
   damage: 0.25,          // 单技能：每张 +25%
@@ -84,21 +96,6 @@ export class Progression {
   damageMul(element) { return (this.dmg[element] ?? 1) * this.dmgAll; }
   cooldownMul(element) { return Math.max(CARD.minCooldown, (this.cd[element] ?? 1) * this.cdAll); }
 
-  _candidates() {
-    const out = [];
-    const free = this.freeSlot >= 0;
-    for (const el of POOL) {
-      if (free && !this.has(el)) out.push({ kind: 'unlock', element: el });
-      if (this.has(el)) {
-        out.push({ kind: 'damage', element: el });
-        out.push({ kind: 'cooldown', element: el });
-      }
-    }
-    out.push({ kind: 'damage', element: 'all' });
-    out.push({ kind: 'cooldown', element: 'all' });
-    return out;
-  }
-
   _shuffle(list) {
     for (let i = list.length - 1; i > 0; i--) {
       const j = Math.floor(this.rng() * (i + 1));
@@ -107,25 +104,27 @@ export class Progression {
     return list;
   }
 
-  /** 抽 n 张互不相同的卡；有空槽时保证至少一张解锁，满槽后保证至少一张伤害。 */
+  /**
+   * 抽 n 张互不相同的卡。
+   * 有空槽 → 只出「解锁」，从没拥有的技能里随机取 n 个（所以第一次升级是十选三）。
+   * 槽满   → 只出强化（伤害/冷却），且至少一张伤害，免得出三张废卡。
+   */
   rollCards(n = 3) {
-    const pool = this._shuffle(this._candidates());
-    const picked = [];
-    const take = (c) => {
-      if (picked.length >= n) return;
-      if (picked.some((p) => p.kind === c.kind && p.element === c.element)) return;
-      picked.push(c);
-    };
     if (this.freeSlot >= 0) {
-      const unlocks = pool.filter((c) => c.kind === 'unlock');
-      if (unlocks.length) take(unlocks[0]);
+      const avail = POOL.filter((el) => !this.has(el));
+      return this._shuffle(avail.slice()).slice(0, n).map((el) => ({ kind: 'unlock', element: el }));
     }
-    for (const c of pool) take(c);
-    if (this.freeSlot < 0 && !picked.some((c) => c.kind === 'damage')) {
-      const d = pool.find((c) => c.kind === 'damage' && !picked.includes(c));
+    const pool = [];
+    for (const s of this.slots) {
+      pool.push({ kind: 'damage', element: s.element }, { kind: 'cooldown', element: s.element });
+    }
+    pool.push({ kind: 'damage', element: 'all' }, { kind: 'cooldown', element: 'all' });
+    const picked = this._shuffle(pool).slice(0, n);
+    if (picked.length && !picked.some((c) => c.kind === 'damage')) {
+      const d = this._shuffle(pool.filter((c) => c.kind === 'damage'))[0];
       if (d) picked[picked.length - 1] = d;
     }
-    return picked.slice(0, n);
+    return picked;
   }
 
   apply(card) {

@@ -21,11 +21,27 @@ export const SOUNDS = {
   impact_thunder: { dur: 0.90, gain: 0.62 },
   impact_beam: { dur: 0.80, gain: 0.58 },
   impact_phoenix: { dur: 0.90, gain: 0.60 },
+  // 另外三个元素是独立音色；电笼/冰川冠/陨石复用同类声部（见 ALIAS）
+  cast_void:        { dur: 0.85, gain: 0.52 },
+  impact_void:      { dur: 0.80, gain: 0.58 },
+  cast_singularity: { dur: 0.95, gain: 0.50 },
+  impact_singularity:{ dur: 0.85, gain: 0.60 },
+  cast_worldtree:   { dur: 1.00, gain: 0.52 },
+  impact_worldtree: { dur: 0.90, gain: 0.60 },
 };
 
-/** 元素 → 施法/命中音效名 */
-export function castSound(element) { return SOUNDS['cast_' + element] ? 'cast_' + element : 'swing'; }
-export function impactSound(element) { return SOUNDS['impact_' + element] ? 'impact_' + element : 'hit'; }
+/** 元素 → 音色家族：同族共用一个声部，避免为每个元素硬造一套 */
+export const ALIAS = { snare: 'thunder', glacier: 'ice', meteor: 'phoenix' };
+
+/** 元素 → 施法/命中音效名（10 个元素全部有声音，同族的走 ALIAS） */
+export function castSound(element) {
+  const k = 'cast_' + (ALIAS[element] ?? element);
+  return SOUNDS[k] ? k : 'swing';
+}
+export function impactSound(element) {
+  const k = 'impact_' + (ALIAS[element] ?? element);
+  return SOUNDS[k] ? k : 'hit';
+}
 
 /** 距离衰减：8 m 内基本不降，20 m 外几乎听不见 */
 export function attenuation(dist) { return 1 / (1 + Math.max(0, dist) * 0.09); }
@@ -164,6 +180,31 @@ function voice(ctx, name, t, buf) {
     case 'impact_phoenix':
       add(noise(ctx, t, { dur: 0.6, freq: 700, q: 0.5, peak: 0.4, sweep: 2.5, buf }));
       add(tone(ctx, t, { f0: 120, f1: 55, dur: 0.6, peak: 0.4 }));
+      break;
+    case 'cast_void':            // 低空撕开：下行的次声 + 逆扫噪声
+      add(tone(ctx, t, { f0: 140, f1: 45, dur: 0.8, type: 'sawtooth', peak: 0.3 }));
+      add(noise(ctx, t + 0.03, { dur: 0.7, freq: 1600, q: 0.7, peak: 0.3, sweep: 0.15, buf }));
+      break;
+    case 'impact_void':
+      add(tone(ctx, t, { f0: 60, f1: 32, dur: 0.7, peak: 0.45 }));
+      add(noise(ctx, t, { dur: 0.6, freq: 300, q: 0.5, type: 'lowpass', peak: 0.35, sweep: 0.5, buf }));
+      break;
+    case 'cast_singularity':     // 吸：上扬的口哨，收尾一下塌陷
+      add(tone(ctx, t, { f0: 300, f1: 1700, dur: 0.55, type: 'sine', peak: 0.26 }));
+      add(noise(ctx, t + 0.4, { dur: 0.45, freq: 1800, q: 0.6, peak: 0.3, sweep: 0.3, buf }));
+      break;
+    case 'impact_singularity':
+      add(tone(ctx, t, { f0: 200, f1: 40, dur: 0.5, type: 'sine', peak: 0.4 }));
+      add(noise(ctx, t, { dur: 0.55, freq: 700, q: 0.6, type: 'lowpass', peak: 0.4, sweep: 3.0, buf }));
+      break;
+    case 'cast_worldtree':       // 木头断裂 + 叶片 + 一声钟
+      add(tone(ctx, t, { f0: 90, f1: 60, dur: 0.5, peak: 0.4 }));
+      add(noise(ctx, t + 0.04, { dur: 0.6, freq: 2200, q: 1.4, peak: 0.22, sweep: 0.6, buf }));
+      add(tone(ctx, t + 0.1, { f0: 392, dur: 0.6, type: 'triangle', peak: 0.18 }));
+      break;
+    case 'impact_worldtree':
+      add(tone(ctx, t, { f0: 70, f1: 45, dur: 0.7, peak: 0.42 }));
+      [660, 880].forEach((f, i) => add(tone(ctx, t + 0.08 + i * 0.06, { f0: f, dur: 0.5, type: 'triangle', peak: 0.16 })));
       break;
     default:
       add(noise(ctx, t, { dur: 0.12, freq: 1000, q: 1, peak: 0.2, buf }));

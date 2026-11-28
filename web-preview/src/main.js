@@ -8,7 +8,7 @@ import { addAtmo } from './atmo.js';
 import { createPostFX } from './postfx.js';
 import { createVfx } from './vfx.js';
 import { createSkills } from './skills.js';
-import { Progression, SKILL_META, SLOTS, POOL, cardText } from './progression.js';
+import { Progression, SKILL_META, POOL, RANGE, cardText } from './progression.js';
 import { clearDistance, approachAngle, yawToLookAt } from './camera.js';
 import { createAudio, renderProbe, castSound, impactSound, panFor, attenuation, SOUNDS } from './audio.js';
 import { loadEnemyAssets, Enemy, ENEMY } from './enemy.js';
@@ -371,7 +371,7 @@ let atkT = 0, atkHit = false, atkCD = 0, atkTotal = 0;   // atkTotal = 本次挥
 
 // ---- 成长：等级 / 4 个技能槽 / 升级抽卡 ----
 const prog = new Progression();
-prog.unlock('ice');                    // 起手只有冰枪，其余三个靠升级卡解锁
+// 起手一个技能都没有：第一次升级抽三张解锁卡，玩家自己选（需求见 README「成长与技能槽」）
 let cardQueue = 0;                     // 待选的卡数（一次多杀可能连升数级）
 let cardOpen = false;
 let cardChoices = [];
@@ -444,8 +444,11 @@ function skillHud() {
   }).join(' · ');
 }
 
-if (params.has('unlock')) {              // ?unlock=1 直接填满 4 槽，供无头截图看技能栏
-  for (const el of Object.keys(SKILL_META)) prog.unlock(el);
+if (params.has('skills')) {              // ?skills=snare,glacier,meteor,void 指定四槽（截图/试玩）
+  for (const el of params.get('skills').split(',')) prog.unlock(el.trim());
+}
+if (params.has('unlock')) {              // ?unlock=1 按池顺序填满 4 槽，供无头截图看技能栏
+  for (const el of POOL) prog.unlock(el);
 }
 if (params.has('xp')) { prog.xp = parseInt(params.get('xp'), 10) || 0; }
 if (params.has('cards')) {               // ?cards=2 直接摆一张选卡界面，供无头截图
@@ -514,7 +517,7 @@ function castSkill(element, force = false) {
   if (!model || cardOpen) return null;
   if (!force && (!grounded || crouched || downT > 0 || hurtAnimT > 0)) return null;
   const dir = new THREE.Vector3(Math.sin(modelYaw), 0, Math.cos(modelYaw));
-  const dist = params.has('reach') ? parseFloat(params.get('reach')) : 12;
+  const dist = params.has('reach') ? parseFloat(params.get('reach')) : (RANGE[element] ?? 12);
   skills.setDamageMul(element, prog.damageMul(element));
   const a = skills.cast(element, model.position, dir, dist, prog.cooldownMul(element));
   if (a) { audio.play(castSound(element)); dbg('cast ' + element + ' ' + dist + 'm'); }
@@ -523,7 +526,8 @@ function castSkill(element, force = false) {
 
 function castSlot(i, force = false) {
   const el = slotElements()[i];
-  return el ? castSkill(el, force) : null;
+  if (!el) { dbg('槽 ' + (i + 1) + ' 还是空的（升级后选技能）'); return null; }
+  return castSkill(el, force);
 }
 
 function spawnWave() {
@@ -654,7 +658,7 @@ function resetGame() {
   hp = hpMax; hurtT = 0; downT = 0; hurtAnimT = 0; atkT = 0; atkCD = 0; atkHit = false;
   wave = 0; waveT = 0;
   camDist = null;                        // 重开后相机距离重新算，别带着上一局的遮挡值
-  prog.reset(); prog.unlock('ice');
+  prog.reset();
   cardQueue = 0; closeCards();
   for (const e of enemies) if (e.root.parent) e.root.parent.remove(e.root);
   enemies.length = 0;

@@ -207,20 +207,21 @@ blender -b --python AnimLib/inspect_fbx.py -- "D:\浏览器·\xxx.fbx"
   2. 特效挂在 `LAYER.VFX`(1) 上，而 `camera.layers.enable(1)` 原来只写在 `useForest` 分支里 → 竞技场里闪电、粒子、地面贴花全部隐形。现在在 `main.js:31` 无条件打开。
   3. 所有特效材质的软边都靠 `softFade(frame.uSceneDepth, ...)`。本项目还没有打包深度的 prepass，`uSceneDepth` 为 null 时采样到 `(0,0,0,0)` → `unpackRGBAToDepth(0)=0` → 判成「被遮挡」→ alpha 恒为 0。占位贴图**必须解包出深度 1.0**：`DataTexture([255,0,0,0])` 刚好是 1.0；给 `[255,255,255,255]` 会算出 1.0039，`perspectiveDepthToViewZ` 翻成正数，软边又变成 0。
   4. 森林的 `FogExp2` 会把 10 m 外的特效洗成白色（demo 场景没有雾），所以每次 `cast` 之后对技能子树做一遍 `noFog()`。
-- **技能池只有四个**：`ice 冰枪 / thunder 雷枪 / beam 光柱 / phoenix 凤凰`。另外六个逐个实测过：`void` 只有一条光带；`snare / glacier / meteor` 只出地面白烟、主体几何不出现（三者的 mesh 都 `frustumCulled = false` 且在 VFX 层，所以不是裁剪或层的问题，根因还没查）——暂不进池。
-- **调试参数**：`?skill=<元素>` 进场自动放一次；`&skillhold=<秒>` 先按 60 Hz 手动推进到该相位再冻结（无头截图只能推进 0.4 s，靠它拍中段）；`?reach=<米>` 改距离；`?unlock=1` 直接填满四个槽；`?cards=2` 摆一张选卡界面；`?xp=<n>` 预置经验。
-- **证据图**：`_shots/skills/CMP_skills.png`（冰枪命中 / 雷枪命中 / 森林冰枪 / 森林雷枪四格，其中两张 HUD 读 `僵尸 0 活` = 伤害真的结算了）、`_shots/skills/pg_cards.png`（升级选卡）、`pg_slots.png`（四槽 + 光柱）。
+- **十个技能全部可用**（`ice 冰枪 / thunder 雷枪 / beam 光柱 / phoenix 凤凰 / void 虚空 / singularity 奇点 / worldtree 世界树 / snare 电笼 / glacier 冰川冠 / meteor 陨石`）。之前记过「`snare / glacier / meteor` 只出地面白烟、主体几何不出现」，那是**测量错误**：当时用默认 `reach=12`，效果生成在 12 m 外，而无头截图只能推进 0.4 s 的应用时间，画面里只剩脚下的地面烟。换成 `&reach=6` 并配合 `&skillhold=<秒>` 定格到中段后，十个技能全部正常。教训：无头截图判「效果坏了」之前，先把效果拉到镜头能拍到的距离。
+- **每个技能有自己的施法距离**：`progression.js` 的 `RANGE`（近战型短、光柱长）：冰枪 11 / 雷枪 12 / 光柱 13 / 凤凰 6 / 虚空 9 / 奇点 8 / 世界树 6 / 电笼 7 / 冰川冠 7 / 陨石 10 米，`?reach=` 仍可覆盖。
+- **调试参数**：`?skill=<元素>` 进场自动放一次；`&skillhold=<秒>` 先按 60 Hz 手动推进到该相位再冻结（无头截图只能推进 0.4 s，靠它拍中段）；`?reach=<米>` 改距离；`?skills=a,b,c,d` 指定四槽；`?unlock=1` 按池顺序填满四槽；`?cards=2` 摆一张选卡界面；`?xp=<n>` 预置经验。
+- **证据图**：`_shots/skills/SHEET_skills10.jpg`（2×5 全部十个技能，同机位 `?yaw=1.57&pitch=0.25&dist=7&reach=6`）、`_shots/skills/cards10.png`（升级选卡：十选三）、`_shots/skills/slots10.png`（四槽 HUD `[1] 电笼 就绪 · [2] 冰川冠 0.1s · [3] 陨石 就绪 · [4] 虚空 就绪` 与冰川冠实拍）；旧的 `_shots/skills/CMP_skills.png`、`pg_cards.png`、`pg_slots.png` 是四技能时代的图。
 
 ### 成长与技能槽（roguelite）
 
 割草循环：**击杀 → 升级 → 抽 3 张卡 → 技能变强 / 解锁新技能 → 无限波次的僵尸**。逻辑在 `web-preview/src/progression.js`（纯数据层，不 import three，node 能直接测），`main.js` 只做接线，选卡界面是 `index.html` 里的 `#cards` 覆盖层。
 
 - **等级**：升到下一级要 `needFor(level) = 6 + 2 × level` 个击杀（1 → 2 级 8 个），余量保留。**试玩按键**：`L` 直接升一级并弹卡、`K` 免费解锁下一个技能（不计击杀，随时可用）。升级时整个世界暂停（`update()` 直接 return），抽 3 张卡，按 `1 / 2 / 3` 或点鼠标选一张；一次多杀连升多级会排队，选完一张接着弹下一张。
-- **技能槽**：4 个，起手只有冰枪，其余三个靠解锁卡。`1–4` 对应槽位，HUD 尾部按槽位显示 `[1] 冰枪 就绪 · [2] 雷枪 1.4s · [3] 空`，不用记哪个键对哪个技能；屏幕底部有常驻按键条（`index.html` 的 `#keys`）。
-- **卡池**：解锁（**有空槽时必出至少一张**，否则技能永远凑不满）/ 单体伤害 +25% / 单体冷却 ×0.85 / 全体伤害 +12% / 全体冷却 ×0.90。满槽后不再出解锁卡，且**保证至少一张伤害卡**（避免连续抽到只有冷却的牌）。冷却乘子有下限 `CARD.minCooldown = 0.35`。
+- **技能槽**：4 个，**起手一个技能都没有**（只有近战），第一次升级从十个技能里随机抽三个让玩家自己选。`1–4` 对应槽位，HUD 尾部按槽位显示 `[1] 电笼 就绪 · [2] 冰川冠 0.1s · [3] 空`，不用记哪个键对哪个技能；屏幕底部有常驻按键条（`index.html` 的 `#keys`）。
+- **卡池（分两段，见 `rollCards`）**：**还有空槽时，三张卡全是解锁**（从没拥有的技能里随机抽三个，所以第一次升级就是十选三）；**四槽满了以后，三张卡全是强化**——单体伤害 +25% / 单体冷却 ×0.85 / 全体伤害 +12% / 全体冷却 ×0.90，且**保证至少一张伤害卡**（避免连续抽到只有冷却的牌）。冷却乘子有下限 `CARD.minCooldown = 0.35`。
 - **乘子怎么生效**：伤害乘子在 `cast()` 那一刻写进 `combat.dmgMul[element]`（`skills.js`），所以已经在飞的技能不会被之后的卡强化；冷却乘子直接乘在 `settings[element].cooldown` 上。
 - **无限波次**：`spawnWave()` 每波 `min(2 + wave, 8)` 只、血量 `× (1 + 0.22 × (wave - 1))`（`enemy.js` 构造参数 `hpScale`），清场 2.2 s 后刷下一波——原来「最多 3 波」的上限已去掉。按 R 重开会连成长一起重置。
-- **测试**：`node test/progression.mjs` 19 项全 PASS（升级余量、有空槽必出解锁卡、满槽不出解锁卡且必有伤害卡、乘子叠加与下限、卡面文案、`grantLevel` 只 +1 级）；原有 world 11 / physics 5 / enemy 24 / enemyglb 18 不变。
+- **测试**：`node test/progression.mjs` 26 项全 PASS（十池齐全且每个都有名称/说明/距离、起手零技能、第一次抽卡三张全是解锁且来自池内、抽卡真的随机而不是固定前三个、有空槽只出解锁、满槽只出强化且必有伤害且只含已拥有元素、乘子叠加与下限、卡面文案、`reset` 清空）；`node test/audio.mjs` 13 项（十个元素都有 cast/impact 音效）；原有 world 11 / physics 5 / enemy 24 / enemyglb 18 不变。
 - **还没做的**：数值平衡（现在僵尸 30 HP、冰枪 80 伤，一张卡就秒）、更多卡种（范围 / 暴击 / 吸血 / 移速）、死亡结算（现在 HP 归零只是原地重生 1.4 s）。
 
 ### 视角与操控（已优化）
@@ -243,13 +244,13 @@ blender -b --python AnimLib/inspect_fbx.py -- "D:\浏览器·\xxx.fbx"
 原来整个项目里**一个音频文件都没有**（全仓 `*.mp3/ogg/wav/m4a/flac` 匹配 0 个，代码里也没有 `AudioContext`），技能、挥击、脚步全是静音的。现在补上，做法是**全部用 WebAudio 现场合成**，不引入任何音频素材：零授权风险、零体积、不依赖网络（本项目其它素材都要从 Mixamo 下来再烘，音效不必），也和「特效全程序化」的路线一致。
 
 - **代码**：`web-preview/src/audio.js`。上半是纯数据 + 纯函数（`SOUNDS` 表、`castSound`/`impactSound` 映射、`attenuation`/`panFor`、`VOICES` 并发上限），可被 node 直接测；下半 `createAudio()` 懒建 `AudioContext`（浏览器自动播放策略：首次点击/按键才建），无 `AudioContext` 的环境（node、老浏览器）所有调用退化成空操作。
-- **19 个音效**：`jump` `land` `step` `swing` `hit` `hurt` `die` `growl` `pickup` `levelup` `click` + `cast_{ice,thunder,beam,phoenix}` + `impact_{ice,thunder,beam,phoenix}`。声部用固定种子噪声（`noiseBuffer` 的 LCG）+ 正弦/三角/锯齿振荡器 + 包络拼：冰是高频 ring + 冷气扫 + 碎冰五连击，雷是噼啪 + 低频轰鸣，光柱是锯齿上升 + 带通，凤凰是火焰上扬噪声，受击用 210/233 Hz 微失谐出痛感，升级是 523/659/784/1046 琶音。
+- **31 个音效**：`jump` `land` `step` `swing` `hit` `hurt` `die` `growl` `pickup` `levelup` `click` + `cast_/impact_` × 十个元素。其中 `void / singularity / worldtree` 有独立声部（次声撕开+逆扫噪声 / 上扬口哨+塌陷 / 木裂+叶噪+392 Hz 钟），`snare / glacier / meteor` 走 `ALIAS` 借用同族（电笼→雷、冰川冠→冰、陨石→凤凰），避免为每个元素硬造一套。声部用固定种子噪声（`noiseBuffer` 的 LCG）+ 正弦/三角/锯齿振荡器 + 包络拼：冰是高频 ring + 冷气扫 + 碎冰五连击，雷是噼啪 + 低频轰鸣，光柱是锯齿上升 + 带通，凤凰是火焰上扬噪声，受击用 210/233 Hz 微失谐出痛感，升级是 523/659/784/1046 琶音。
 - **混音**：master(0.55) → `DynamicsCompressor`(−12 dB, 6:1) → 输出，留足余量。距离衰减 `1/(1+0.09d)`，声像 `clamp(dx/12, ±1)`（听者取相机位置与 yaw，右向量 `(cos yaw, −sin yaw)` 与 `update()` 里的 `right` 同式）。
 - **防糊**：`VOICES` 给同名音效设并发上限（`land` 2 / `hit` 4 / `growl` 3 / `die` 4 / `step` 2 / `pickup` 3，其余 6）；同名最小间隔 `step` 0.06 s、其余 0.02 s，一屏僵尸同时倒地不会叠成噪音。
 - **接线点**（全在 `main.js`）：起跳 `jump`、落地 `land`（`rate` 按落速 0.45–1.4）、脚步 `step`（间隔 `clamp(0.62 − speed×0.055, 0.22, 0.6)`）、挥击 `swing`、命中 `hit` + 击杀 `die`、玩家受击 `hurt`、僵尸咬人 `growl`、拾取 `pickup`、升级 `levelup`、选卡 `click`、施法 `castSound(element)`、技能命中 `impactSound(element)`。
 - **音量平衡（实测峰值，同 play() 口径）**：`hit` 0.195 / `impact_thunder` 0.212 / `land` 0.164 / `cast_thunder` 0.174 最响，`jump` 0.069、`step` 0.035、`swing` 0.026 最轻——**频繁音故意压低**（脚步每 0.3 s 一次、挥击每 0.6 s 一次，和命中同响会很快听累）。全部 < 0.25，没有削波。调音时的两处修正：`jump` 原来比落地小 7 倍（起跳基本听不见，声部峰值 0.25 → 0.70）、`renderProbe` 原来漏乘 `SOUNDS.gain`（读数偏高，和实际混音口径不一致）。
 - **操作**：`M` 静音（HUD 显示 `· 静音(M)`）；`?mute=1` 启动即静音。
-- **验证**：`node test/audio.mjs` 11 项 PASS（每个音效 dur/gain 合法且 gain ≤ 0.7、四个元素的 cast/impact 都在、未知元素回落 `swing`/`hit`、衰减单调、声像夹紧、`panFor(6) = 0.5`、并发上限存在）。另外两个只给自动化用的参数：`?audioprobe=1` 用 `OfflineAudioContext` 把 19 个音效离线渲一遍，把时长/峰值/RMS 打到屏幕左上（`#probe`）；`?audiotest=1` 走真实 `play()` 路径打 `ready/state/played/rejected/live`。无头 Edge 里要加 `--autoplay-policy=no-user-gesture-required`，否则 `AudioContext` 一直是 `suspended`、探针读数全是 0。
+- **验证**：`node test/audio.mjs` 13 项 PASS（每个音效 dur/gain 合法且 gain ≤ 0.7、十个元素的 cast/impact 都在、`ALIAS` 命中、三个新元素是独立声部、未知元素回落 `swing`/`hit`、衰减单调、声像夹紧、`panFor(6) = 0.5`、并发上限存在）。另外两个只给自动化用的参数：`?audioprobe=1` 用 `OfflineAudioContext` 把 19 个音效离线渲一遍，把时长/峰值/RMS 打到屏幕左上（`#probe`）；`?audiotest=1` 走真实 `play()` 路径打 `ready/state/played/rejected/live`。无头 Edge 里要加 `--autoplay-policy=no-user-gesture-required`，否则 `AudioContext` 一直是 `suspended`、探针读数全是 0。
 - **证据**：`_shots/audio/final.png`（1000×760：19 行探针读数 + 右下 `audiotest ready=true state=running played=6 rejected=0`）。
 
 ## 角色指标（龙人，实测）
