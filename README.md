@@ -238,6 +238,20 @@ blender -b --python AnimLib/inspect_fbx.py -- "D:\浏览器·\xxx.fbx"
 - **软锁定（战斗镜头）**：站定不动或正在出手时，镜头缓缓转向 11 m 内最近的活僵尸；一按 WASD 就交还控制权（避免镜头替你拐弯）。手动转视角后 1.2 s 内完全不抢。权重按 `dt × 2.4` 爬升，转动速度上限 `2.6 rad/s × 权重`，走最短弧（`approachAngle`），因此是「跟过去」而不是「瞬移对准」。出手瞬间如果锁定的那只在 4 m 内，角色会先转向它再挥（`startAttack` 里的 `modelYaw`），不会朝空气挥。HUD 出现 `· 锁定` 表示正在生效。`?aim=<倍率>` 调快慢、`?noaim=1` 关掉、`?foes=<n>` 覆盖每波数量（截图摆位用）。注意无头 Edge 的 `--virtual-time-budget` 只推进 0.1–0.5 s 应用时间，拍对比图时用 `?aim=60` 让它在这么短的时间里收敛，实机是 2.6 rad/s。
 - **证据图**：`_shots/skills/CMP_cam.png`（同一机位、同一场景，左 fov 48 右 fov 60）、`_shots/skills/CMP_aim.png`（同一机位，左无软锁定右有，僵尸在 90° 侧后方）。
 
+### 音效（程序化合成）
+
+原来整个项目里**一个音频文件都没有**（全仓 `*.mp3/ogg/wav/m4a/flac` 匹配 0 个，代码里也没有 `AudioContext`），技能、挥击、脚步全是静音的。现在补上，做法是**全部用 WebAudio 现场合成**，不引入任何音频素材：零授权风险、零体积、不依赖网络（本项目其它素材都要从 Mixamo 下来再烘，音效不必），也和「特效全程序化」的路线一致。
+
+- **代码**：`web-preview/src/audio.js`。上半是纯数据 + 纯函数（`SOUNDS` 表、`castSound`/`impactSound` 映射、`attenuation`/`panFor`、`VOICES` 并发上限），可被 node 直接测；下半 `createAudio()` 懒建 `AudioContext`（浏览器自动播放策略：首次点击/按键才建），无 `AudioContext` 的环境（node、老浏览器）所有调用退化成空操作。
+- **19 个音效**：`jump` `land` `step` `swing` `hit` `hurt` `die` `growl` `pickup` `levelup` `click` + `cast_{ice,thunder,beam,phoenix}` + `impact_{ice,thunder,beam,phoenix}`。声部用固定种子噪声（`noiseBuffer` 的 LCG）+ 正弦/三角/锯齿振荡器 + 包络拼：冰是高频 ring + 冷气扫 + 碎冰五连击，雷是噼啪 + 低频轰鸣，光柱是锯齿上升 + 带通，凤凰是火焰上扬噪声，受击用 210/233 Hz 微失谐出痛感，升级是 523/659/784/1046 琶音。
+- **混音**：master(0.55) → `DynamicsCompressor`(−12 dB, 6:1) → 输出，留足余量。距离衰减 `1/(1+0.09d)`，声像 `clamp(dx/12, ±1)`（听者取相机位置与 yaw，右向量 `(cos yaw, −sin yaw)` 与 `update()` 里的 `right` 同式）。
+- **防糊**：`VOICES` 给同名音效设并发上限（`land` 2 / `hit` 4 / `growl` 3 / `die` 4 / `step` 2 / `pickup` 3，其余 6）；同名最小间隔 `step` 0.06 s、其余 0.02 s，一屏僵尸同时倒地不会叠成噪音。
+- **接线点**（全在 `main.js`）：起跳 `jump`、落地 `land`（`rate` 按落速 0.45–1.4）、脚步 `step`（间隔 `clamp(0.62 − speed×0.055, 0.22, 0.6)`）、挥击 `swing`、命中 `hit` + 击杀 `die`、玩家受击 `hurt`、僵尸咬人 `growl`、拾取 `pickup`、升级 `levelup`、选卡 `click`、施法 `castSound(element)`、技能命中 `impactSound(element)`。
+- **音量平衡（实测峰值，同 play() 口径）**：`hit` 0.195 / `impact_thunder` 0.212 / `land` 0.164 / `cast_thunder` 0.174 最响，`jump` 0.069、`step` 0.035、`swing` 0.026 最轻——**频繁音故意压低**（脚步每 0.3 s 一次、挥击每 0.6 s 一次，和命中同响会很快听累）。全部 < 0.25，没有削波。调音时的两处修正：`jump` 原来比落地小 7 倍（起跳基本听不见，声部峰值 0.25 → 0.70）、`renderProbe` 原来漏乘 `SOUNDS.gain`（读数偏高，和实际混音口径不一致）。
+- **操作**：`M` 静音（HUD 显示 `· 静音(M)`）；`?mute=1` 启动即静音。
+- **验证**：`node test/audio.mjs` 11 项 PASS（每个音效 dur/gain 合法且 gain ≤ 0.7、四个元素的 cast/impact 都在、未知元素回落 `swing`/`hit`、衰减单调、声像夹紧、`panFor(6) = 0.5`、并发上限存在）。另外两个只给自动化用的参数：`?audioprobe=1` 用 `OfflineAudioContext` 把 19 个音效离线渲一遍，把时长/峰值/RMS 打到屏幕左上（`#probe`）；`?audiotest=1` 走真实 `play()` 路径打 `ready/state/played/rejected/live`。无头 Edge 里要加 `--autoplay-policy=no-user-gesture-required`，否则 `AudioContext` 一直是 `suspended`、探针读数全是 0。
+- **证据**：`_shots/audio/final.png`（1000×760：19 行探针读数 + 右下 `audiotest ready=true state=running played=6 rejected=0`）。
+
 ## 角色指标（龙人，实测）
 
 - 身高 2.010 m，脚底 y=0，轴心在双脚踝中点；面向 +Z，Y-up，1 单位 = 1 米

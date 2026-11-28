@@ -10,6 +10,7 @@ import { createVfx } from './vfx.js';
 import { createSkills } from './skills.js';
 import { Progression, SKILL_META, SLOTS, POOL, cardText } from './progression.js';
 import { clearDistance, approachAngle, yawToLookAt } from './camera.js';
+import { createAudio, renderProbe, castSound, impactSound, panFor, attenuation, SOUNDS } from './audio.js';
 import { loadEnemyAssets, Enemy, ENEMY } from './enemy.js';
 
 const ATMO_SCALE = 0.25;   // 线性空间加色约比 sRGB 亮 4 倍，0.25 与原观感对齐
@@ -163,7 +164,7 @@ let skillDemo = params.get('skill');   // ?skill=ice|thunder 自动放一次技�
 let fxDemo = params.get('fx');     // ?fx=land|pickup 循环触发特效；配合 &fxhold=<秒> 定格在该相位
 let fxNext = 0;
 let fxFrozen = false;
-let sprintT = 0;
+let sprintT = 0, stepT = 0;
 const picked = [];   // 本帧收集到的球，复用一个数组避免每帧分配
 const WALK_SPEED = 0.66;   // 异形 walk：36.4 帧/循环 @24fps，单脚支撑位移 0.50 m → 0.66 m/s
 const RUN_SPEED = 5.30;    // 真 Run 动作（Fast Run 重定向）：支撑脚实测后退 0.22 m/帧 @24fps → 5.3 m/s
@@ -401,6 +402,7 @@ function chooseCard(i) {
   const card = cardChoices[i];
   if (!card) return;
   prog.apply(card);
+  audio.play('click');
   cardQueue = Math.max(0, cardQueue - 1);
   cardOpen = false;
   if (cardsEl) cardsEl.classList.remove('show');
@@ -415,11 +417,12 @@ function closeCards() {
 function gainXp(kills = 1) {
   if (kills <= 0) return;
   const ups = prog.addKill(kills);
-  if (ups > 0) { cardQueue += ups; if (!cardOpen) openCards(); }
+  if (ups > 0) { audio.play('levelup'); cardQueue += ups; if (!cardOpen) openCards(); }
 }
 
 /** L 键：直接升一级并弹卡；K 键：免费解锁下一个技能（试玩用，不计击杀）。 */
 function levelUpByKey() {
+  audio.play('levelup');
   cardQueue += prog.grantLevel();
   if (!cardOpen) openCards();
 }
@@ -456,12 +459,56 @@ const skills = createSkills({
   getEnemies: () => enemies,
   radiusOf: ENEMY.radius,
   onHit: (e, killed, element) => {
+    const sp = spatial(e.root.position.x, e.root.position.z);
     vfx.landing(e.root.position.x, e.root.position.y, e.root.position.z, killed ? 1.2 : 0.55);
-    if (killed) gainXp(1);
+    audio.play(impactSound(element), sp);
+    if (killed) { audio.play('die', sp); gainXp(1); }
   },
 });
 skills.resize(window.innerWidth, window.innerHeight);
 let skillFrozen = false;
+
+// ---- 音效：全部现场合成（src/audio.js），首次点击/按键时才建 AudioContext（浏览器自动播放策略）----
+const audio = createAudio({ muted: params.get('mute') === '1' });
+function resumeAudio() { audio.resume(); }
+addEventListener('pointerdown', resumeAudio, { once: true });
+addEventListener('keydown', resumeAudio, { once: true });
+if (params.has('audioprobe')) {
+  // ?audioprobe=1：用 OfflineAudioContext 把每个音效离线渲一遍，把峰值/RMS 打到屏幕上做证据
+  const el = document.getElementById('probe');
+  if (el) {
+    el.style.display = 'block';
+    el.textContent = 'audioprobe: rendering…';
+    (async () => {
+      const rows = [];
+      for (const n of Object.keys(SOUNDS)) {
+        rows.push(await renderProbe((ch, len, sr) => new OfflineAudioContext(ch, len, sr), n));
+      }
+      el.textContent = 'audioprobe（离线渲染 19 个音效）\n' +
+        rows.map((r) => r.name.padEnd(15) + String(r.dur).padStart(5) + 's  peak ' + r.peak.toFixed(3) + '  rms ' + r.rms.toFixed(4)).join('\n');
+    })();
+  }
+}
+
+if (params.has('audiotest')) {
+  // ?audiotest=1：走真实的 createAudio().play() 路径，把「是否真的建了图 / 被节流几次」打出来
+  audio.resume();
+  for (const n of ['jump', 'land', 'hit', 'cast_ice', 'impact_thunder', 'pickup']) audio.play(n, { dist: 0, pan: 0 });
+  const d = document.createElement('div');
+  d.style.cssText = 'position:fixed;left:12px;bottom:12px;z-index:30;font:12px/1.5 ui-monospace,monospace;color:#ffe9a8;background:rgba(8,12,18,.82);padding:6px 9px;border-radius:6px;pointer-events:none';
+  document.body.appendChild(d);
+  setTimeout(() => {
+    const s = audio.stats();
+    d.textContent = 'audiotest  ready=' + s.ready + '  state=' + s.state + '  played=' + s.played + '  rejected=' + s.rejected + '  live=' + s.live;
+  }, 600);
+}
+
+/** 世界坐标 → 声像/距离（听者 = 相机，右向量与 update() 里的 right 同式） */
+function spatial(x, z) {
+  const dx = x - camera.position.x, dz = z - camera.position.z;
+  const rx = Math.cos(rig.yaw), rz = -Math.sin(rig.yaw);
+  return { dist: Math.hypot(dx, dz), pan: panFor(dx * rx + dz * rz) };
+}
 
 function castSkill(element, force = false) {
   if (!model || cardOpen) return null;
@@ -470,7 +517,7 @@ function castSkill(element, force = false) {
   const dist = params.has('reach') ? parseFloat(params.get('reach')) : 12;
   skills.setDamageMul(element, prog.damageMul(element));
   const a = skills.cast(element, model.position, dir, dist, prog.cooldownMul(element));
-  if (a) dbg('cast ' + element + ' ' + dist + 'm');
+  if (a) { audio.play(castSound(element)); dbg('cast ' + element + ' ' + dist + 'm'); }
   return a;
 }
 
@@ -499,6 +546,7 @@ loadEnemyAssets()
 function startAttack() {
   if (!model || atkT > 0 || atkCD > 0 || !grounded || crouched || downT > 0 || hurtAnimT > 0) return;
   const a = params.has('noatk') ? null : actions.attack;   // ?noatk=1 退回旧版「无片段 + 弧光」，用于前后对照
+  audio.play('swing');
   if (focus) {                                  // 软锁定：出手时面朝锁定的那只，别朝着空气挥
     const dx = focus.root.position.x - model.position.x, dz = focus.root.position.z - model.position.z;
     if (Math.hypot(dx, dz) < 4) modelYaw = Math.atan2(dx, dz);
@@ -522,6 +570,7 @@ function startAttack() {
 
 function attackHit() {
   const fx = Math.sin(modelYaw), fz = Math.cos(modelYaw);
+  let hits = 0;
   for (const e of enemies) {
     if (!e.alive) continue;
     const dx = e.root.position.x - model.position.x;
@@ -530,15 +579,18 @@ function attackHit() {
     if (d > ATTACK.reach + ENEMY.radius) continue;
     if ((dx * fx + dz * fz) / (d || 1) < ATTACK.dot) continue;   // 只打正面 ±70°
     const killed = e.hurt(ATTACK.dmg, { x: fx, z: fz });
+    hits++;
     vfx.landing(e.root.position.x, e.root.position.y, e.root.position.z, killed ? 1.1 : 0.6);
-    if (killed) gainXp(1);
+    if (killed) { audio.play('die', spatial(e.root.position.x, e.root.position.z)); gainXp(1); }
   }
+  if (hits) audio.play('hit');
 }
 
 function hurtPlayer(dmg) {
   if (hurtT > 0 || downT > 0) return;
   hp = Math.max(0, hp - dmg);
   hurtT = 0.6;                                   // 无敌帧，避免被同一记攻击连扣
+  audio.play('hurt');
   const ha = actions.hurt;
   if (ha && atkT <= 0) {                         // 挥击中不打断，其余状态立刻缩一下
     hurtAnimT = HURT_TOTAL;
@@ -621,6 +673,7 @@ addEventListener('keydown', (e) => {
   }
   if (e.code === 'KeyL') levelUpByKey();
   if (e.code === 'KeyK') unlockNextByKey();
+  if (e.code === 'KeyM') { audio.setMuted(!audio.muted); dbg('mute ' + audio.muted); }
   if (e.code === 'KeyJ') startAttack();
   if (e.code === 'Digit1') castSlot(0);
   if (e.code === 'Digit2') castSlot(1);
@@ -710,7 +763,7 @@ function update(dt) {
     // 起跳冲量在蓄力结束时施加
     if (takeoffT >= 0) {
       takeoffT -= dt;
-      if (takeoffT < 0) { vy = JUMP_V; }
+      if (takeoffT < 0) { vy = JUMP_V; audio.play('jump'); }
     }
     const gh = world.groundAt(model.position.x, model.position.z, py);
     const impactVy = vy;
@@ -719,6 +772,12 @@ function update(dt) {
     model.position.y = py;
     if (!wasGrounded && grounded) {
       vfx.landing(model.position.x, py, model.position.z, THREE.MathUtils.clamp(-impactVy / JUMP_V, 0.35, 1.5));
+      audio.play('land', { rate: THREE.MathUtils.clamp(-impactVy / JUMP_V, 0.45, 1.4) });
+    }
+    // 脚步：间隔随速度变短，跑起来更密
+    if (grounded && speed > 0.55 && (stepT -= dt) <= 0) {
+      stepT = THREE.MathUtils.clamp(0.62 - speed * 0.055, 0.22, 0.6);
+      audio.play('step');
     }
     const sprinting = grounded && speed > RUN_SPEED * 0.55;
     vfx.trailPoint(model.position.x, py, model.position.z, sprinting);
@@ -757,6 +816,7 @@ function update(dt) {
       for (const e of enemies) {
         e.update(dt, pp, world.groundAt, world.resolve);
         if (e.consumeHit()) {
+          audio.play('growl', spatial(e.root.position.x, e.root.position.z));
           const dx = model.position.x - e.root.position.x;
           const dz = model.position.z - e.root.position.z;
           if (Math.hypot(dx, dz) <= ENEMY.reach + 0.35) hurtPlayer(ENEMY.dmg);
@@ -776,7 +836,7 @@ function update(dt) {
     if (!finished) {
       picked.length = 0;
       collected += world.tick(dt, performance.now() / 1000, { x: model.position.x, y: py, z: model.position.z }, 1.15, picked);
-      for (const orb of picked) vfx.pickup(orb.x, orb.y, orb.z, py);
+      for (const orb of picked) { vfx.pickup(orb.x, orb.y, orb.z, py); audio.play('pickup', spatial(orb.x, orb.z)); }
       playTime += dt;
       if (world.total > 0 && collected >= world.total) { finished = true; jumpT = 0; }
     } else {
@@ -884,6 +944,7 @@ function update(dt) {
       (params.has('atk') ? ` · cur ${curAnim} · atkT ${atkT.toFixed(2)} · hit ${atkHit ? 1 : 0}` : '') +
       ((params.has('atk') || params.has('skill')) ? ` · 僵尸 ${enemies.filter((e) => e.alive).length} 活` : '') +
     (aimW > 0.15 ? ' · 锁定' : '') +
+    (audio.muted ? ' · 静音(M)' : '') +
       ` · ${skillHud()}`;
   }
 }

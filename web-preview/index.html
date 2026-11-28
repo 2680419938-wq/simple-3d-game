@@ -26,7 +26,8 @@
   #cards .card b{font-size:15px;color:#fff}
   #cards .card i{font-style:normal;font-size:12px;line-height:1.5;color:#9fb2c8}
   #cards .card .n{position:absolute;right:11px;top:9px;font-size:11px;color:#6d819b}
-  #keys{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);display:flex;flex-wrap:wrap;justify-content:center;gap:6px 14px;max-width:calc(100vw - 32px);pointer-events:none;font-size:12px;color:#9fb2c8;text-shadow:0 1px 3px #000}
+  #probe{position:fixed;left:12px;top:92px;z-index:30;display:none;white-space:pre;font:11px/1.5 ui-monospace,Consolas,monospace;color:#9fe4ff;background:rgba(8,12,18,.82);padding:8px 10px;border-radius:6px;pointer-events:none}
+#keys{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);display:flex;flex-wrap:wrap;justify-content:center;gap:6px 14px;max-width:calc(100vw - 32px);pointer-events:none;font-size:12px;color:#9fb2c8;text-shadow:0 1px 3px #000}
   #keys span{display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
   #keys kbd{display:inline-block;min-width:16px;padding:1px 6px;border-radius:4px;border:1px solid #46566d;border-bottom-width:2px;background:linear-gradient(180deg,rgba(58,74,96,.92),rgba(30,40,54,.92));color:#e6eef8;font:inherit;font-size:11px;line-height:1.45;text-align:center;text-shadow:none}
   #dbg{position:fixed;left:12px;bottom:10px;font-size:12px;line-height:1.45;color:#7fd4ff;white-space:pre;text-shadow:0 1px 3px #000;pointer-events:none;opacity:.9}
@@ -41,6 +42,7 @@
 </div>
 <div id="stats"></div>
 <div id="game"></div>
+<div id="probe"></div>
 <div id="keys">
   <span><kbd>WASD</kbd>移动</span>
   <span><kbd>Space</kbd>跳</span>
@@ -51,6 +53,7 @@
   <span><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd><kbd>4</kbd>技能</span>
   <span><kbd>L</kbd>升级</span>
   <span><kbd>K</kbd>解锁技能</span>
+  <span><kbd>M</kbd>静音</span>
   <span><kbd>R</kbd>重开</span>
 </div>
 <div id="dbg"></div>
